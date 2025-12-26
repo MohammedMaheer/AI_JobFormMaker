@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Interview Question Generator</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/gas-styles.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="logo">
+                <img src="data:image/png;base64,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" alt="Acceleration Robotics" class="company-logo">
+                <h1>AI Interview Generator</h1>
+            </div>
+            <p class="tagline">Transform job descriptions into professional interview questions</p>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Step 1: Input -->
+            <section class="card input-section" id="input-section">
+                <div class="card-header">
+                    <span class="step-badge">Step 1</span>
+                    <h2>Upload Job Description</h2>
+                </div>
+                <div class="card-body">
+                    <form id="job-form">
+                        <!-- Job Title -->
+                        <div class="form-group">
+                            <label for="job-title">
+                                <i class="fas fa-briefcase"></i> Job Title
+                            </label>
+                            <input type="text" id="job-title" name="job_title" 
+                                   placeholder="e.g., Senior Software Engineer" required>
+                        </div>
+
+                        <!-- File Upload -->
+                        <div class="form-group">
+                            <label>
+                                <i class="fas fa-file-upload"></i> Upload File (PDF, DOCX, TXT)
+                            </label>
+                            <div class="file-upload-wrapper" id="file-upload-wrapper">
+                                <input type="file" id="file-input" name="file" 
+                                       accept=".pdf,.docx,.txt" hidden>
+                                <div class="file-upload-area" id="file-upload-area">
+                                    <i class="fas fa-cloud-upload-alt"></i>
+                                    <p>Drag & drop your file here or <span class="browse-link">browse</span></p>
+                                    <small>Supported formats: PDF, DOCX, TXT (Max 16MB)</small>
+                                </div>
+                                <div class="file-info" id="file-info" style="display: none;">
+                                    <i class="fas fa-file-alt"></i>
+                                    <span id="file-name"></span>
+                                    <button type="button" class="remove-file" id="remove-file">
+                                        <i class="fas fa-times"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- OR Divider -->
+                        <div class="divider">
+                            <span>OR</span>
+                        </div>
+
+                        <!-- Text Input -->
+                        <div class="form-group">
+                            <label for="job-description">
+                                <i class="fas fa-align-left"></i> Paste Job Description
+                            </label>
+                            <textarea id="job-description" name="job_description" rows="8"
+                                      placeholder="Paste the job description text here..."></textarea>
+                        </div>
+
+                        <!-- Options -->
+                        <div class="options-row">
+                            <div class="form-group half">
+                                <label for="num-questions">
+                                    <i class="fas fa-list-ol"></i> Number of Questions
+                                </label>
+                                <select id="num-questions" name="num_questions">
+                                    <option value="5">5 Questions</option>
+                                    <option value="10" selected>10 Questions</option>
+                                    <option value="15">15 Questions</option>
+                                    <option value="20">20 Questions</option>
+                                </select>
+                            </div>
+                            <div class="form-group half">
+                                <label for="question-types">
+                                    <i class="fas fa-tags"></i> Question Type
+                                </label>
+                                <select id="question-types" name="question_types">
+                                    <option value="mixed" selected>Mixed</option>
+                                    <option value="technical">Technical Only</option>
+                                    <option value="behavioral">Behavioral Only</option>
+                                    <option value="situational">Situational Only</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- AI Settings (Collapsible) -->
+                        <div class="ai-settings-wrapper">
+                            <button type="button" class="ai-settings-toggle" id="ai-settings-toggle">
+                                <i class="fas fa-cog"></i> AI Settings
+                                <span class="toggle-indicator"><i class="fas fa-chevron-down"></i></span>
+                            </button>
+                            <div class="ai-settings-content" id="ai-settings-content" style="display: none;">
+                                <div class="ai-settings-info">
+                                    <i class="fas fa-info-circle"></i>
+                                    <span>Optional: Use your own API key for better rate limits. Default uses built-in Perplexity.</span>
+                                </div>
+                                <div class="options-row">
+                                    <div class="form-group half">
+                                        <label for="ai-provider">
+                                            <i class="fas fa-robot"></i> AI Provider
+                                        </label>
+                                        <select id="ai-provider" name="ai_provider">
+                                            <option value="perplexity" selected>Perplexity (Default)</option>
+                                            <option value="openai">OpenAI (GPT-4)</option>
+                                            <option value="claude">Claude (Anthropic)</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group half">
+                                        <label for="api-key">
+                                            <i class="fas fa-key"></i> API Key (Optional)
+                                        </label>
+                                        <input type="password" id="api-key" name="api_key" 
+                                               placeholder="Leave empty to use default">
+                                    </div>
+                                </div>
+                                <div class="api-key-help">
+                                    <small>
+                                        Get API keys: 
+                                        <a href="https://www.perplexity.ai/settings/api" target="_blank">Perplexity</a> |
+                                        <a href="https://platform.openai.com/api-keys" target="_blank">OpenAI</a> |
+                                        <a href="https://console.anthropic.com/settings/keys" target="_blank">Claude</a>
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Submit Button -->
+                        <button type="submit" class="btn btn-primary btn-lg" id="generate-btn">
+                            <i class="fas fa-magic"></i> Generate Questions
+                        </button>
+                    </form>
+                </div>
+            </section>
+
+            <!-- Loading State -->
+            <section class="card loading-section" id="loading-section" style="display: none;">
+                <div class="loading-content">
+                    <div class="spinner"></div>
+                    <h3>Generating Interview Questions...</h3>
+                    <p>Our AI is analyzing the job description and creating relevant questions.</p>
+                </div>
+            </section>
+
+            <!-- Step 2: Results -->
+            <section class="card results-section" id="results-section" style="display: none;">
+                <div class="card-header">
+                    <span class="step-badge">Step 2</span>
+                    <h2>Generated Questions</h2>
+                    <button class="btn btn-outline btn-sm" id="regenerate-btn">
+                        <i class="fas fa-redo"></i> Regenerate
+                    </button>
+                </div>
+                <div class="card-body">
+                    <div class="questions-list" id="questions-list">
+                        <!-- Questions will be inserted here -->
+                    </div>
+
+                    <!-- Export Section -->
+                    <div class="export-section">
+                        <h3><i class="fas fa-download"></i> Export Options</h3>
+                        <div class="action-buttons">
+                            <button class="btn btn-secondary" id="copy-btn">
+                                <i class="fas fa-copy"></i> Copy Text
+                            </button>
+                            <button class="btn btn-secondary" id="download-json-btn">
+                                <i class="fas fa-file-code"></i> JSON
+                            </button>
+                            <button class="btn btn-secondary" id="download-csv-btn">
+                                <i class="fas fa-file-csv"></i> CSV/Excel
+                            </button>
+                            <button class="btn btn-secondary" id="download-txt-btn">
+                                <i class="fas fa-file-alt"></i> Text File
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Job Application Form Section -->
+                    <div class="application-form-section">
+                        <h3><i class="fas fa-file-alt"></i> Create Job Application Form</h3>
+                        <p class="section-info">Create a complete job application form with these interview questions via Zapier → Google Forms</p>
+                        
+                        <div class="form-group">
+                            <label for="company-name">
+                                <i class="fas fa-building"></i> Company Name (Optional)
+                            </label>
+                            <input type="text" id="company-name" placeholder="e.g., Acme Corporation">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="zapier-webhook-form">
+                                <i class="fas fa-link"></i> Webhook URL (Zapier or Google Apps Script)
+                            </label>
+                            <input type="text" id="zapier-webhook-form" list="webhook-history"
+                                   placeholder="Paste Zapier Webhook or Google Apps Script URL...">
+                            <datalist id="webhook-history"></datalist>
+                            <small>
+                                <a href="#" id="zapier-form-help-link">Zapier Guide</a> | 
+                                <a href="#" id="gas-form-help-link" class="highlight-link">Get Free Google Apps Script</a>
+                            </small>
+                        </div>
+                        
+                        <div class="form-preview">
+                            <h4>Your application form will include:</h4>
+                            <ul class="form-fields-preview">
+                                <li><i class="fas fa-user"></i> Full Name</li>
+                                <li><i class="fas fa-envelope"></i> Email Address</li>
+                                <li><i class="fas fa-phone"></i> Phone Number</li>
+                                <li><i class="fas fa-file-pdf"></i> Resume/CV Link</li>
+                                <li><i class="fab fa-linkedin"></i> LinkedIn Profile</li>
+                                <li><i class="fas fa-briefcase"></i> Years of Experience</li>
+                                <li><i class="fas fa-building"></i> Current/Previous Company</li>
+                                <li><i class="fas fa-dollar-sign"></i> Expected Salary</li>
+                                <li><i class="fas fa-calendar"></i> Availability to Start</li>
+                                <li><i class="fas fa-question-circle"></i> + Your Generated Interview Questions</li>
+                            </ul>
+                        </div>
+                        
+                        <button class="btn btn-success btn-lg" id="create-application-form-btn">
+                            <i class="fab fa-wpforms"></i> Create Job Application Form
+                        </button>
+                    </div>
+
+                    <!-- Save to Sheets Section -->
+                    <div class="zapier-section">
+                        <h3><i class="fas fa-table"></i> Save to Google Sheets</h3>
+                        <p class="zapier-info">Save questions to a spreadsheet using Zapier or Google Apps Script (Free)</p>
+                        <div class="form-group">
+                            <input type="text" id="zapier-webhook" list="webhook-history"
+                                   placeholder="Paste Zapier Webhook or Google Apps Script URL...">
+                            <small>
+                                <a href="#" id="zapier-help-link">Zapier Guide</a> | 
+                                <a href="#" id="gas-help-link" class="highlight-link">Get Free Google Apps Script</a>
+                            </small>
+                        </div>
+                        <button class="btn btn-zapier" id="send-zapier-btn">
+                            <i class="fas fa-paper-plane"></i> Save to Sheets
+                        </button>
+                    </div>
+
+                    <!-- Start Over -->
+                    <div class="start-over-section">
+                        <button class="btn btn-outline" id="start-over-btn">
+                            <i class="fas fa-plus"></i> Create New Questions
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Success Message -->
+            <section class="card success-section" id="success-section" style="display: none;">
+                <div class="card-body success-content">
+                    <i class="fas fa-check-circle success-icon"></i>
+                    <h2>Success!</h2>
+                    <p id="success-message">Your questions have been sent successfully.</p>
+                    <button class="btn btn-primary" id="back-to-results-btn">
+                        <i class="fas fa-arrow-left"></i> Back to Questions
+                    </button>
+                    <button class="btn btn-outline" id="new-questions-btn">
+                        <i class="fas fa-plus"></i> Create New Questions
+                    </button>
+                </div>
+            </section>
+        </main>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p>Powered by Perplexity AI | 
+               <a href="#" id="help-link">How to use</a> | 
+               <a href="#" id="zapier-setup-link">Zapier Setup Guide</a>
+            </p>
+        </footer>
+
+        <!-- Help Modal -->
+        <div class="modal" id="help-modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>How to Use</h3>
+                    <button class="modal-close" id="close-help">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <ol>
+                        <li><strong>Enter Job Title:</strong> Provide the position name for context.</li>
+                        <li><strong>Upload or Paste:</strong> Upload a PDF/DOCX file or paste the job description text.</li>
+                        <li><strong>Select Options:</strong> Choose the number and type of questions.</li>
+                        <li><strong>Generate:</strong> Click the generate button and wait for AI to create questions.</li>
+                        <li><strong>Export:</strong> Download as CSV/JSON/Text or send to Google Sheets via Zapier.</li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+
+        <!-- Zapier Setup Modal -->
+        <div class="modal" id="zapier-modal">
+            <div class="modal-content modal-lg">
+                <div class="modal-header">
+                    <h3><i class="fas fa-bolt"></i> Zapier Integration Setup</h3>
+                    <button class="modal-close" id="close-zapier">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="setup-steps">
+                        <h4>Free Google Sheets Integration (5 minutes)</h4>
+                        
+                        <div class="step">
+                            <span class="step-num">1</span>
+                            <div class="step-content">
+                                <strong>Create a free Zapier account</strong>
+                                <p>Go to <a href="https://zapier.com" target="_blank">zapier.com</a> and sign up (free tier includes 100 tasks/month)</p>
+                            </div>
+                        </div>
+                        
+                        <div class="step">
+                            <span class="step-num">2</span>
+                            <div class="step-content">
+                                <strong>Create a new Zap</strong>
+                                <p>Click "Create Zap" and search for "Webhooks by Zapier" as the trigger</p>
+                            </div>
+                        </div>
+                        
+                        <div class="step">
+                            <span class="step-num">3</span>
+                            <div class="step-content">
+                                <strong>Select "Catch Hook"</strong>
+                                <p>Choose "Catch Hook" as the trigger event - this creates a webhook URL</p>
+                            </div>
+                        </div>
+                        
+                        <div class="step">
+                            <span class="step-num">4</span>
+                            <div class="step-content">
+                                <strong>Copy the Webhook URL</strong>
+                                <p>Zapier will give you a URL like: <code>https://hooks.zapier.com/hooks/catch/xxxxx/xxxxx/</code></p>
+                            </div>
+                        </div>
+                        
+                        <div class="step">
+                            <span class="step-num">5</span>
+                            <div class="step-content">
+                                <strong>Add Google Sheets Action</strong>
+                                <p>For the action, search "Google Sheets" → "Create Spreadsheet Row"</p>
+                            </div>
+                        </div>
+                        
+                        <div class="step">
+                            <span class="step-num">6</span>
+                            <div class="step-content">
+                                <strong>Map the fields</strong>
+                                <p>Connect your Google account, select/create a sheet, and map: job_title, questions_text, question_1, question_2, etc.</p>
+                            </div>
+                        </div>
+                        
+                        <div class="step">
+                            <span class="step-num">7</span>
+                            <div class="step-content">
+                                <strong>Test & Publish</strong>
+                                <p>Test the Zap, then turn it on. Paste the webhook URL in this app!</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="tip-box">
+                        <i class="fas fa-lightbulb"></i>
+                        <div>
+                            <strong>Pro Tip:</strong> You can also use Zapier to create Google Forms, send emails, 
+                            post to Slack, or connect to 5000+ other apps!
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Google Forms Setup Modal -->
+        <div class="modal" id="forms-modal">
+            <div class="modal-content modal-lg">
+                <div class="modal-header">
+                    <h3><i class="fab fa-wpforms"></i> Google Forms Integration Setup</h3>
+                    <button class="modal-close" id="close-forms">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="setup-steps">
+                        <h4>Create Job Application Form with Zapier (10 minutes)</h4>
+                        
+                        <div class="step">
+                            <span class="step-num">1</span>
+                            <div class="step-content">
+                                <strong>Create a free Zapier account</strong>
+                                <p>Go to <a href="https://zapier.com" target="_blank">zapier.com</a> and sign up</p>
+                            </div>
+                        </div>
+                        
+                        <div class="step">
+                            <span class="step-num">2</span>
+                            <div class="step-content">
+                                <strong>Create a new Zap with Webhook trigger</strong>
+                                <p>Trigger: "Webhooks by Zapier" → "Catch Hook" → Copy the webhook URL</p>
+                            </div>
+                        </div>
+                        
+                        <div class="step">
+                            <span class="step-num">3</span>
+                            <div class="step-content">
+                                <strong>Option A: Use Google Forms directly</strong>
+                                <p>Action: "Google Forms" → "Create a Form Response" to add questions to an existing form</p>
+                            </div>
+                        </div>
+                        
+                        <div class="step">
+                            <span class="step-num">4</span>
+                            <div class="step-content">
+                                <strong>Option B: Use Google Sheets + Forms</strong>
+                                <p>Action: "Google Sheets" → Create a sheet that's linked to a Google Form. Map fields like:</p>
+                                <ul>
+                                    <li><code>form_title</code> - The form title</li>
+                                    <li><code>job_title</code> - Position name</li>
+                                    <li><code>question_1</code> through <code>question_10</code> - Individual questions</li>
+                                    <li><code>questions_text</code> - All questions as text</li>
+                                </ul>
+                            </div>
+                        </div>
+                        
+                        <div class="step">
+                            <span class="step-num">5</span>
+                            <div class="step-content">
+                                <strong>Alternative: Use Typeform or JotForm</strong>
+                                <p>Zapier also integrates with Typeform and JotForm for more advanced forms!</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="tip-box success">
+                        <i class="fas fa-check-circle"></i>
+                        <div>
+                            <strong>Fields Sent:</strong> The app sends <code>form_title</code>, <code>job_title</code>, 
+                            <code>company_name</code>, standard application fields (name, email, phone, etc.), 
+                            and all interview questions individually (<code>question_1</code>, <code>question_2</code>, etc.)
+                        </div>
+                    </div>
+                    
+                    <div class="tip-box">
+                        <i class="fas fa-lightbulb"></i>
+                        <div>
+                            <strong>Manual Alternative:</strong> Download the CSV file and manually create a Google Form, 
+                            then copy-paste the questions!
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Google Apps Script Modal -->
+    <div class="modal" id="gas-modal">
+        <div class="modal-content large-modal">
+            <div class="modal-header">
+                <h3><i class="fas fa-code"></i> Google Apps Script Setup (Free & Unlimited)</h3>
+                <button class="modal-close" id="close-gas">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p>Use this free script to save data directly to Google Sheets without Zapier limits.</p>
+                
+                <div class="setup-steps">
+                    <div class="step">
+                        <span class="step-num">1</span>
+                        <div class="step-content">
+                            <strong>Open Google Sheets</strong>
+                            <p>Create a new Sheet or open an existing one.</p>
+                        </div>
+                    </div>
+                    
+                    <div class="step">
+                        <span class="step-num">2</span>
+                        <div class="step-content">
+                            <strong>Open Script Editor</strong>
+                            <p>Go to <strong>Extensions</strong> > <strong>Apps Script</strong>.</p>
+                        </div>
+                    </div>
+                    
+                    <div class="step">
+                        <span class="step-num">3</span>
+                        <div class="step-content">
+                            <strong>Paste Code</strong>
+                            <p>Delete any existing code and paste this script:</p>
+                            <div class="code-block-wrapper">
+                                <button class="copy-btn" id="copy-gas-code">Copy Code</button>
+                                <pre><code id="gas-code">function doPost(e) {
+  try {
+    var data = JSON.parse(e.postData.contents);
+    
+    // Check if this is a form creation request
+    if (data.action === 'create_application_form') {
+      return createForm(data);
+    } else {
+      return saveToSheet(data);
+    }
+  } catch (error) {
+    return ContentService.createTextOutput(JSON.stringify({
+      "status": "error",
+      "message": error.toString()
+    })).setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+function createForm(data) {
+  // Create a new Google Form
+  var form = FormApp.create(data.form_title);
+  form.setDescription('Job Application for ' + data.job_title + (data.company_name ? ' at ' + data.company_name : ''));
+  
+  // Add Standard Fields
+  if (data.standard_fields) {
+    data.standard_fields.forEach(function(field) {
+      var item = form.addTextItem();
+      item.setTitle(field.field);
+      if (field.required) item.setRequired(true);
+    });
+  }
+  
+  // Add Interview Questions Section
+  form.addPageBreakItem().setTitle('Interview Questions');
+  
+  if (data.interview_questions) {
+    data.interview_questions.forEach(function(q) {
+      form.addParagraphTextItem()
+        .setTitle(q.question)
+        .setHelpText('Category: ' + q.category)
+        .setRequired(true);
+    });
+  }
+  
+  // Return the form URL
+  return ContentService.createTextOutput(JSON.stringify({
+    "status": "success",
+    "formUrl": form.getPublishedUrl(),
+    "editUrl": form.getEditUrl()
+  })).setMimeType(ContentService.MimeType.JSON);
+}
+
+function saveToSheet(data) {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  
+  // Add headers if sheet is empty
+  if (sheet.getLastRow() === 0) {
+    var headers = Object.keys(data);
+    sheet.appendRow(headers);
+  }
+  
+  // Prepare row data based on headers
+  var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  var row = headers.map(function(header) {
+    var val = data[header];
+    // Convert objects to string
+    if (typeof val === 'object') return JSON.stringify(val);
+    return val || "";
+  });
+  
+  sheet.appendRow(row);
+  
+  return ContentService.createTextOutput(JSON.stringify({"status": "success"}))
+    .setMimeType(ContentService.MimeType.JSON);
+}</code></pre>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="step">
+                        <span class="step-num">4</span>
+                        <div class="step-content">
+                            <strong>Deploy as Web App</strong>
+                            <p>Click <strong>Deploy</strong> > <strong>New deployment</strong>.</p>
+                            <ul>
+                                <li>Select type: <strong>Web app</strong></li>
+                                <li>Description: "Job App Webhook"</li>
+                                <li>Execute as: <strong>Me</strong></li>
+                                <li>Who has access: <strong>Anyone</strong> (Important!)</li>
+                            </ul>
+                        </div>
+                    </div>
+                    
+                    <div class="step">
+                        <span class="step-num">5</span>
+                        <div class="step-content">
+                            <strong>Copy URL</strong>
+                            <p>Copy the "Web app URL" and paste it into the input field on this website.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
