@@ -2,7 +2,7 @@
 
 A powerful web application that transforms job descriptions into professional interview questions using advanced AI models. It features seamless integration with Google Sheets and Forms for a complete recruitment workflow.
 
-![Acceleration Robotics](https://www.accelerationrobotics.com/img/logo.png)
+![Acceleration Robotics]
 
 ## ✨ Features
 
