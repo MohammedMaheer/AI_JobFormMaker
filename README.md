@@ -76,7 +76,12 @@ This script acts as the bridge between Google Forms and your Python App.
     *   **Execute as**: "Me" (your email).
     *   **Who has access**: **Anyone** (Important!).
     *   Click **Deploy**.
-    *   **Authorize** the script (Click Review Permissions > Choose Account > Advanced > Go to Untitled Project (unsafe) > Allow).
+    *   **Authorize** the script:
+        1. Click **Review Permissions**.
+        2. Choose your account.
+        3. Click **Advanced** > **Go to ... (unsafe)**.
+        4. Click **Allow**.
+    *   **⚠️ CRITICAL:** You MUST grant **ALL** permissions requested, especially **Google Drive** access. This allows the script to share resume files so the AI can read them.
 
 5.  **Copy the Script URL**:
     *   Copy the **Web App URL** (ends in `/exec`).
