@@ -65,20 +65,65 @@ function createForm(data) {
     var form = FormApp.create(data.form_title);
     form.setDescription('Job Application for ' + data.job_title + (data.company_name ? ' at ' + data.company_name : ''));
     
+    // REQUIRED for File Uploads: Collect email addresses
+    try {
+      form.setCollectEmail(true);
+    } catch (e) {
+      Logger.log("Could not set collect email: " + e);
+    }
+    
     // 2. Add Standard Fields
     if (data.standard_fields) {
       data.standard_fields.forEach(function(field) {
         var item;
-        if (field.type === 'text' || field.type === 'email' || field.type === 'url' || field.type === 'phone') {
-          item = form.addTextItem();
-        } else if (field.type === 'number') {
-          item = form.addTextItem(); // FormApp doesn't have specific number item, use text validation if needed
-        } else {
-          item = form.addTextItem();
+        try {
+          if (field.type === 'file') {
+            item = form.addFileUploadItem();
+          } else if (field.type === 'text') {
+            item = form.addTextItem();
+          } else if (field.type === 'email') {
+            item = form.addTextItem();
+            // Add Email Validation
+            var emailValidation = FormApp.createTextValidation()
+              .requireTextIsEmail()
+              .build();
+            item.setValidation(emailValidation);
+          } else if (field.type === 'url') {
+            item = form.addTextItem();
+            // Add URL Validation
+            var urlValidation = FormApp.createTextValidation()
+              .requireTextIsUrl()
+              .build();
+            item.setValidation(urlValidation);
+          } else if (field.type === 'phone') {
+            item = form.addTextItem();
+            // Add Phone Validation (Regex for digits)
+            var phoneValidation = FormApp.createTextValidation()
+              .requireTextMatchesPattern("[0-9()+\\- ]+")
+              .setHelpText("Please enter a valid phone number.")
+              .build();
+            item.setValidation(phoneValidation);
+          } else if (field.type === 'number') {
+            item = form.addTextItem(); 
+            var numberValidation = FormApp.createTextValidation()
+              .requireNumber()
+              .build();
+            item.setValidation(numberValidation);
+          } else {
+            item = form.addTextItem();
+          }
+          
+          item.setTitle(field.field);
+          if (field.required) item.setRequired(true);
+        } catch (err) {
+          // Fallback: If File Upload fails (common restriction), use Text Item for URL
+          if (field.type === 'file') {
+            item = form.addTextItem();
+            item.setTitle(field.field + " (Link)");
+            item.setHelpText("Please paste a link to your Resume/CV (Google Drive, Dropbox, etc.)");
+            if (field.required) item.setRequired(true);
+          }
         }
-        
-        item.setTitle(field.field);
-        if (field.required) item.setRequired(true);
       });
     }
     
@@ -157,12 +202,30 @@ function onFormSubmit(e) {
     var itemResponses = formResponse.getItemResponses();
     var email = formResponse.getRespondentEmail();
     
+    // Attempt to get Form Description (Job Description)
+    var jobDescription = "Job Application";
+    try {
+      var form = FormApp.openById(formResponse.getFormId());
+      jobDescription = form.getDescription() || form.getTitle();
+    } catch (err) {
+      Logger.log("Could not get form description: " + err);
+    }
+    
     var payload = {
       "name": "Unknown Candidate",
       "email": email || "",
+      "phone": "",
       "resume_url": "",
-      "job_description": "Job Application", // You might want to store the JD in the form description or properties
+      "job_description": jobDescription,
       "answers": {}
+    };
+
+    // Intelligent Field Detection
+    // We use a scoring system to identify fields even if admins rename them
+    var bestMatches = {
+      name: { score: 0, value: "" },
+      phone: { score: 0, value: "" },
+      resume: { score: 0, value: "" }
     };
 
     // Loop through responses
@@ -174,37 +237,78 @@ function onFormSubmit(e) {
       var answer = itemResponse.getResponse();
       var titleLower = title.toLowerCase();
       
-      if (titleLower.includes("name") && !titleLower.includes("company")) {
-        payload.name = answer;
-      } 
-      else if (titleLower.includes("email") && !payload.email) {
+      // Always add to answers for context
+      payload.answers[title] = answer;
+
+      // --- 1. Detect Name ---
+      var nameScore = 0;
+      if (titleLower.includes("full name")) nameScore += 10;
+      else if (titleLower.includes("candidate name")) nameScore += 10;
+      else if (titleLower.includes("your name")) nameScore += 8;
+      else if (titleLower === "name") nameScore += 5;
+      else if (titleLower.includes("name")) nameScore += 2;
+      
+      // Negative weights for name to avoid false positives
+      if (titleLower.includes("company")) nameScore -= 10;
+      if (titleLower.includes("reference")) nameScore -= 10;
+      if (titleLower.includes("manager")) nameScore -= 10;
+      if (titleLower.includes("file")) nameScore -= 10;
+      
+      if (nameScore > bestMatches.name.score) {
+        bestMatches.name = { score: nameScore, value: answer };
+      }
+
+      // --- 2. Detect Email (if not auto-collected) ---
+      if (!payload.email && (titleLower.includes("email"))) {
         payload.email = answer;
       }
-      // Robust Resume Detection: Check for File Upload Type OR Keywords
-      else if (type === FormApp.ItemType.FILE_UPLOAD || titleLower.includes("resume") || titleLower.includes("cv") || titleLower.includes("upload")) {
-        if (Array.isArray(answer) && answer.length > 0) {
-          // It's a file upload (returns array of IDs)
-          var fileId = answer[0];
-          
-          // Make the file publicly accessible so the Python app can download it
-          try {
-            var file = DriveApp.getFileById(fileId);
-            file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-            Logger.log("Made file public: " + fileId);
-          } catch (shareError) {
-            Logger.log("Could not set file permissions: " + shareError.toString());
-          }
-          
-          payload.resume_url = "https://drive.google.com/uc?export=download&id=" + fileId;
-        } else {
-          // It might be a text field with a URL
-          payload.resume_url = answer;
-        }
+
+      // --- 3. Detect Phone ---
+      var phoneScore = 0;
+      if (titleLower.includes("phone")) phoneScore += 10;
+      if (titleLower.includes("mobile")) phoneScore += 10;
+      if (titleLower.includes("cell")) phoneScore += 10;
+      if (titleLower.includes("contact number")) phoneScore += 8;
+      
+      if (phoneScore > bestMatches.phone.score) {
+        bestMatches.phone = { score: phoneScore, value: answer };
       }
-      else {
-        payload.answers[title] = answer;
+
+      // --- 4. Detect Resume ---
+      var resumeScore = 0;
+      if (type === FormApp.ItemType.FILE_UPLOAD) resumeScore += 20; // Strongest signal
+      if (titleLower.includes("resume")) resumeScore += 10;
+      if (titleLower.includes("cv")) resumeScore += 10;
+      if (titleLower.includes("curriculum vitae")) resumeScore += 10;
+      if (titleLower.includes("upload")) resumeScore += 5;
+      if (titleLower.includes("attach")) resumeScore += 5;
+      
+      if (resumeScore > bestMatches.resume.score) {
+        // Handle File Upload vs Text URL
+        var resumeValue = "";
+        if (type === FormApp.ItemType.FILE_UPLOAD && Array.isArray(answer) && answer.length > 0) {
+           var fileId = answer[0];
+           try {
+             var file = DriveApp.getFileById(fileId);
+             file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+             resumeValue = "https://drive.google.com/uc?export=download&id=" + fileId;
+             Logger.log("Made file public: " + fileId);
+           } catch (e) {
+             Logger.log("Error sharing file: " + e);
+             resumeValue = "https://drive.google.com/open?id=" + fileId; // Fallback
+           }
+        } else {
+           resumeValue = answer;
+        }
+        
+        bestMatches.resume = { score: resumeScore, value: resumeValue };
       }
     }
+
+    // Assign best matches to payload
+    if (bestMatches.name.score > 0) payload.name = bestMatches.name.value;
+    if (bestMatches.phone.score > 0) payload.phone = bestMatches.phone.value;
+    if (bestMatches.resume.score > 0) payload.resume_url = bestMatches.resume.value;
 
     // Send to Python Backend
     var options = {
@@ -214,7 +318,8 @@ function onFormSubmit(e) {
       "muteHttpExceptions": true
     };
 
-    UrlFetchApp.fetch(WEBHOOK_URL, options);
+    var response = UrlFetchApp.fetch(WEBHOOK_URL, options);
+    Logger.log("Webhook Response: " + response.getContentText());
     
   } catch (error) {
     Logger.log("Error in onFormSubmit: " + error.toString());

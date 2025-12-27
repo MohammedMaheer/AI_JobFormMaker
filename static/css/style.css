@@ -1,19 +1,20 @@
-/* CSS Variables */
+/* CSS Variables - Acceleration Robotics Theme */
 :root {
-    --primary-color: #6366f1;
-    --primary-hover: #4f46e5;
-    --secondary-color: #64748b;
-    --success-color: #22c55e;
+    --primary-color: #2563eb; /* Acceleration Blue */
+    --primary-hover: #1d4ed8;
+    --secondary-color: #94a3b8;
+    --success-color: #10b981;
     --info-color: #3b82f6;
     --warning-color: #f59e0b;
     --danger-color: #ef4444;
-    --dark-color: #1e293b;
-    --light-color: #f8fafc;
-    --border-color: #e2e8f0;
-    --text-primary: #1e293b;
-    --text-secondary: #64748b;
-    --background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    --card-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+    --dark-color: #000000;
+    --light-color: #171717; /* Dark Grey for "light" backgrounds in dark mode */
+    --border-color: #333333;
+    --text-primary: #ffffff;
+    --text-secondary: #d4d4d4;
+    --background: #000000; /* Black Background */
+    --card-bg: #111111;
+    --card-shadow: 0 10px 40px rgba(255, 255, 255, 0.05);
     --transition: all 0.3s ease;
 }
 
@@ -63,6 +64,28 @@ body {
     font-weight: 700;
 }
 
+/* 3D Animation for Heading */
+.animate-3d {
+    animation: popIn3D 1.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+    transform-style: preserve-3d;
+    perspective: 1000px;
+    opacity: 0;
+    transform: translateY(50px) rotateX(-20deg);
+    text-shadow: 0 10px 20px rgba(0,0,0,0.5);
+}
+
+@keyframes popIn3D {
+    0% {
+        opacity: 0;
+        transform: translateY(50px) rotateX(-20deg) scale(0.9);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0) rotateX(0) scale(1);
+        text-shadow: 2px 2px 0px #1d4ed8, 4px 4px 10px rgba(0,0,0,0.5);
+    }
+}
+
 .company-logo {
     height: 60px;
     width: auto;
@@ -80,11 +103,12 @@ body {
 
 /* Cards */
 .card {
-    background: white;
+    background: var(--card-bg);
     border-radius: 16px;
     box-shadow: var(--card-shadow);
     margin-bottom: 1.5rem;
     overflow: hidden;
+    border: 1px solid var(--border-color);
 }
 
 .card-header {
@@ -144,6 +168,8 @@ body {
     font-size: 1rem;
     font-family: inherit;
     transition: var(--transition);
+    background-color: var(--light-color); /* Darker input bg */
+    color: var(--text-primary);
 }
 
 .form-group input:focus,
@@ -151,7 +177,7 @@ body {
 .form-group select:focus {
     outline: none;
     border-color: var(--primary-color);
-    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2); /* Blue glow */
 }
 
 .form-group textarea {
@@ -192,7 +218,7 @@ body {
 .file-upload-area:hover,
 .file-upload-area.dragover {
     border-color: var(--primary-color);
-    background: rgba(99, 102, 241, 0.05);
+    background: rgba(37, 99, 235, 0.05); /* Blue tint */
 }
 
 .file-upload-area i {
@@ -440,23 +466,23 @@ body {
 }
 
 .tag-category {
-    background: #e0e7ff;
-    color: #4338ca;
+    background: rgba(37, 99, 235, 0.2);
+    color: var(--primary-color);
 }
 
 .tag-difficulty {
-    background: #fef3c7;
-    color: #92400e;
+    background: rgba(245, 158, 11, 0.2);
+    color: var(--warning-color);
 }
 
 .tag-difficulty.easy {
-    background: #dcfce7;
-    color: #166534;
+    background: rgba(16, 185, 129, 0.2);
+    color: var(--success-color);
 }
 
 .tag-difficulty.hard {
-    background: #fee2e2;
-    color: #991b1b;
+    background: rgba(239, 68, 68, 0.2);
+    color: var(--danger-color);
 }
 
 /* Action Buttons */
@@ -576,9 +602,11 @@ body {
 }
 
 .modal-content {
-    background: white;
+    background: var(--card-bg);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
     border-radius: 16px;
-    max-width: 500px;
+    max-width: 700px;
     width: 100%;
     max-height: 90vh;
     overflow-y: auto;
@@ -712,14 +740,15 @@ body {
 .zapier-section {
     margin: 2rem 0;
     padding: 1.5rem;
-    background: linear-gradient(135deg, #ff4a00 0%, #ff6b35 100%);
+    background: var(--card-bg);
+    border: 1px solid #ff4a00;
     border-radius: 12px;
-    color: white;
+    color: var(--text-primary);
 }
 
 .zapier-section h3 {
     margin-bottom: 0.5rem;
-    color: white;
+    color: #ff4a00;
 }
 
 .zapier-section h3 i {
@@ -730,6 +759,7 @@ body {
     margin-bottom: 1rem;
     opacity: 0.9;
     font-size: 0.9rem;
+    color: var(--text-secondary);
 }
 
 .zapier-section .form-group {
@@ -739,10 +769,10 @@ body {
 .zapier-section input {
     width: 100%;
     padding: 0.875rem 1rem;
-    border: 2px solid rgba(255,255,255,0.3);
+    border: 2px solid var(--border-color);
     border-radius: 10px;
     font-size: 1rem;
-    background: rgba(255,255,255,0.95);
+    background: var(--light-color);
     color: var(--text-primary);
 }
 
@@ -752,8 +782,8 @@ body {
 
 .zapier-section input:focus {
     outline: none;
-    border-color: white;
-    box-shadow: 0 0 0 3px rgba(255,255,255,0.3);
+    border-color: #ff4a00;
+    box-shadow: 0 0 0 3px rgba(255, 74, 0, 0.2);
 }
 
 .zapier-section small {
@@ -763,18 +793,18 @@ body {
 }
 
 .zapier-section small a {
-    color: white;
-    font-weight: 600;
-}
-
-.btn-zapier {
-    background: white;
     color: #ff4a00;
     font-weight: 600;
 }
 
+.btn-zapier {
+    background: #ff4a00;
+    color: white;
+    font-weight: 600;
+}
+
 .btn-zapier:hover:not(:disabled) {
-    background: #fff5f0;
+    background: #e64300;
     transform: translateY(-2px);
 }
 
@@ -802,7 +832,7 @@ body {
 }
 
 .ai-settings-toggle:hover {
-    background: #eef2ff;
+    background: rgba(37, 99, 235, 0.1);
 }
 
 .ai-settings-toggle i:first-child {
@@ -820,7 +850,7 @@ body {
 
 .ai-settings-content {
     padding: 1rem;
-    background: white;
+    background: var(--card-bg);
     border-top: 1px solid var(--border-color);
 }
 
@@ -829,15 +859,15 @@ body {
     align-items: center;
     gap: 0.5rem;
     padding: 0.75rem;
-    background: #e0f2fe;
+    background: rgba(37, 99, 235, 0.1);
     border-radius: 8px;
     margin-bottom: 1rem;
     font-size: 0.85rem;
-    color: #0369a1;
+    color: var(--info-color);
 }
 
 .ai-settings-info i {
-    color: #0284c7;
+    color: var(--info-color);
 }
 
 .ai-settings-content .form-group input[type="password"] {
@@ -965,32 +995,32 @@ body {
     display: flex;
     gap: 1rem;
     padding: 1rem;
-    background: #fef3c7;
+    background: rgba(245, 158, 11, 0.1);
     border-radius: 10px;
-    border-left: 4px solid #f59e0b;
+    border-left: 4px solid var(--warning-color);
     margin-bottom: 1rem;
 }
 
 .tip-box i {
-    color: #f59e0b;
+    color: var(--warning-color);
     font-size: 1.25rem;
 }
 
 .tip-box strong {
-    color: #92400e;
+    color: var(--warning-color);
 }
 
 .tip-box.success {
-    background: #dcfce7;
-    border-left-color: #22c55e;
+    background: rgba(16, 185, 129, 0.1);
+    border-left-color: var(--success-color);
 }
 
 .tip-box.success i {
-    color: #22c55e;
+    color: var(--success-color);
 }
 
 .tip-box.success strong {
-    color: #166534;
+    color: var(--success-color);
 }
 
 /* Question Skills */
@@ -1004,14 +1034,15 @@ body {
 .application-form-section {
     margin: 2rem 0;
     padding: 1.5rem;
-    background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+    background: var(--card-bg);
+    border: 1px solid #22c55e;
     border-radius: 12px;
-    color: white;
+    color: var(--text-primary);
 }
 
 .application-form-section h3 {
     margin-bottom: 0.5rem;
-    color: white;
+    color: #22c55e;
 }
 
 .application-form-section h3 i {
@@ -1022,6 +1053,7 @@ body {
     margin-bottom: 1.5rem;
     opacity: 0.9;
     font-size: 0.9rem;
+    color: var(--text-secondary);
 }
 
 .application-form-section .form-group {
@@ -1029,22 +1061,22 @@ body {
 }
 
 .application-form-section .form-group label {
-    color: white;
+    color: var(--text-primary);
     margin-bottom: 0.5rem;
     display: block;
 }
 
 .application-form-section .form-group label i {
-    color: rgba(255,255,255,0.8);
+    color: #22c55e;
 }
 
 .application-form-section input {
     width: 100%;
     padding: 0.875rem 1rem;
-    border: 2px solid rgba(255,255,255,0.3);
+    border: 2px solid var(--border-color);
     border-radius: 10px;
     font-size: 1rem;
-    background: rgba(255,255,255,0.95);
+    background: var(--light-color);
     color: var(--text-primary);
 }
 
@@ -1054,8 +1086,8 @@ body {
 
 .application-form-section input:focus {
     outline: none;
-    border-color: white;
-    box-shadow: 0 0 0 3px rgba(255,255,255,0.3);
+    border-color: #22c55e;
+    box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.2);
 }
 
 .application-form-section small {
@@ -1065,22 +1097,23 @@ body {
 }
 
 .application-form-section small a {
-    color: white;
+    color: #22c55e;
     font-weight: 600;
 }
 
 /* Form Preview */
 .form-preview {
-    background: rgba(255,255,255,0.15);
+    background: var(--light-color);
     border-radius: 10px;
     padding: 1rem;
     margin: 1.5rem 0;
+    border: 1px solid var(--border-color);
 }
 
 .form-preview h4 {
     margin-bottom: 0.75rem;
     font-size: 0.95rem;
-    color: white;
+    color: var(--text-primary);
 }
 
 .form-fields-preview {
@@ -1098,19 +1131,22 @@ body {
     display: flex;
     align-items: center;
     gap: 0.5rem;
+    color: var(--text-secondary);
 }
 
 .form-fields-preview li i {
     width: 16px;
     opacity: 0.8;
+    color: #22c55e;
 }
 
 .form-fields-preview li:last-child {
     grid-column: span 2;
     margin-top: 0.5rem;
     padding-top: 0.5rem;
-    border-top: 1px solid rgba(255,255,255,0.2);
+    border-top: 1px solid var(--border-color);
     font-weight: 600;
+    color: var(--text-primary);
 }
 
 @media (max-width: 600px) {
@@ -1257,7 +1293,7 @@ body {
 }
 
 .candidate-score-card {
-    background: white;
+    background: var(--card-bg);
     border: 1px solid var(--border-color);
     border-radius: 12px;
     padding: 1.5rem;
@@ -1461,15 +1497,15 @@ body {
     grid-column: 1 / -1;
     margin-top: 1.5rem;
     padding: 1.5rem;
-    background: #f8fafc;
+    background: var(--dark-color);
     border-radius: 10px;
-    border: 1px solid #e2e8f0;
+    border: 1px solid var(--border-color);
 }
 
 .ai-analysis-section h5 {
     font-size: 1.1rem;
     margin-bottom: 1rem;
-    color: #4f46e5;
+    color: var(--primary-color);
     display: flex;
     align-items: center;
     gap: 0.5rem;
@@ -1529,7 +1565,7 @@ body {
 .ai-adjustment {
     margin-top: 1rem;
     padding-top: 1rem;
-    border-top: 1px dashed #cbd5e1;
+    border-top: 1px dashed var(--border-color);
     text-align: right;
 }
 

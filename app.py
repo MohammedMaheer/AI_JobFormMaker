@@ -2,7 +2,8 @@ import os
 import json
 import io
 from datetime import datetime
-from flask import Flask, request, jsonify, render_template, send_file, Response
+import uuid
+from flask import Flask, request, jsonify, render_template, send_file, Response, send_from_directory
 from flask_cors import CORS
 from dotenv import load_dotenv
 import requests
@@ -24,7 +25,7 @@ CORS(app)
 
 # Configure upload folder
 UPLOAD_FOLDER = 'uploads'
-ALLOWED_EXTENSIONS = {'pdf', 'docx', 'txt'}
+ALLOWED_EXTENSIONS = {'pdf', 'docx', 'txt', 'html', 'htm'}
 
 if not os.path.exists(UPLOAD_FOLDER):
     os.makedirs(UPLOAD_FOLDER)
@@ -40,6 +41,92 @@ def allowed_file(filename):
 @app.route('/')
 def index():
     return render_template('index.html')
+
+
+@app.route('/ranking')
+def ranking():
+    return render_template('ranking.html')
+
+
+@app.route('/uploads/<filename>')
+def uploaded_file(filename):
+    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
+
+
+@app.route('/api/rank', methods=['POST'])
+def rank_candidates():
+    """Rank candidates based on job description"""
+    try:
+        job_description = request.form.get('job_description')
+        if not job_description:
+            return jsonify({'error': 'Job description is required'}), 400
+            
+        candidates_data = []
+        
+        if 'resumes' in request.files:
+            files = request.files.getlist('resumes')
+            for file in files:
+                if file and file.filename and allowed_file(file.filename):
+                    # Generate unique filename to prevent overwrites
+                    ext = file.filename.rsplit('.', 1)[1].lower()
+                    unique_filename = f"{uuid.uuid4().hex}_{file.filename}"
+                    filepath = os.path.join(app.config['UPLOAD_FOLDER'], unique_filename)
+                    file.save(filepath)
+                    
+                    try:
+                        # Parse resume
+                        candidate_info = resume_parser.parse_resume(filepath, file.filename)
+                        
+                        # If parsing failed or returned error
+                        if 'error' in candidate_info:
+                            print(f"Error parsing {file.filename}: {candidate_info['error']}")
+                            # Still add to list so admin can see it failed and view file
+                            candidates_data.append({
+                                'candidate_name': 'Parsing Failed',
+                                'total_score': 0,
+                                'breakdown': {'skills_match': 0, 'experience': 0, 'education': 0},
+                                'feedback': f"Could not parse resume. Error: {candidate_info['error']}",
+                                'file_url': f"/uploads/{unique_filename}",
+                                'original_filename': file.filename
+                            })
+                            continue
+                            
+                        # Score candidate
+                        score_result = candidate_scorer.score_candidate(
+                            candidate_info, 
+                            job_description, 
+                            "Job Position"
+                        )
+                        
+                        # Add file access info
+                        score_result['file_url'] = f"/uploads/{unique_filename}"
+                        score_result['original_filename'] = file.filename
+                        
+                        candidates_data.append(score_result)
+                    except Exception as e:
+                        print(f"Error processing {file.filename}: {str(e)}")
+                        # Add error entry
+                        candidates_data.append({
+                            'candidate_name': 'Error Processing',
+                            'total_score': 0,
+                            'breakdown': {'skills_match': 0, 'experience': 0, 'education': 0},
+                            'feedback': f"Error processing file: {str(e)}",
+                            'file_url': f"/uploads/{unique_filename}",
+                            'original_filename': file.filename
+                        })
+                    # Note: We do NOT remove the file here anymore so it can be accessed
+        
+        # Sort by score
+        candidates_data.sort(key=lambda x: x.get('total_score', 0), reverse=True)
+        
+        return jsonify({
+            'success': True,
+            'results': candidates_data
+        })
+        
+    except Exception as e:
+        print(f"Error ranking candidates: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/api/process', methods=['POST'])
@@ -129,14 +216,14 @@ def send_to_zapier():
                 # Standard application fields
                 'standard_fields': [
                     {'field': 'Full Name', 'type': 'text', 'required': True},
-                    {'field': 'Email Address', 'type': 'email', 'required': True},
+                    # Email is collected automatically by Google Forms via setCollectEmail(true)
                     {'field': 'Phone Number', 'type': 'phone', 'required': True},
-                    {'field': 'Resume/CV Link', 'type': 'url', 'required': False},
+                    {'field': 'Resume/CV Upload', 'type': 'file', 'required': True},
                     {'field': 'LinkedIn Profile', 'type': 'url', 'required': False},
                     {'field': 'Years of Experience', 'type': 'number', 'required': True},
                     {'field': 'Current/Previous Company', 'type': 'text', 'required': False},
                     {'field': 'Expected Salary', 'type': 'text', 'required': False},
-                    {'field': 'Availability to Start', 'type': 'text', 'required': True},
+                    {'field': 'Availability to Start', 'type': 'date', 'required': True},
                 ],
                 # Interview questions
                 'interview_questions': [],
@@ -418,7 +505,7 @@ def score_candidate():
 
 
 @app.route('/api/rank-candidates', methods=['POST'])
-def rank_candidates():
+def rank_candidates_json():
     """Rank multiple candidates"""
     try:
         data = request.get_json()
@@ -462,6 +549,7 @@ def webhook_application():
         
         name = data.get('name', 'Unknown Candidate')
         email = data.get('email', '')
+        phone = data.get('phone', '')
         resume_url = data.get('resume_url')
         job_description = data.get('job_description', '')
         answers = data.get('answers', {})
@@ -471,6 +559,7 @@ def webhook_application():
         candidate_info = {
             "name": name,
             "email": email,
+            "phone": phone,
             "raw_text": ""
         }
         
@@ -503,6 +592,7 @@ def webhook_application():
                         content_disposition = response.headers.get('Content-Disposition', '')
                         
                         ext = '.pdf' # Default
+                        filename = "resume" # Default filename base
                         
                         if 'application/pdf' in content_type:
                             ext = '.pdf'
@@ -510,22 +600,29 @@ def webhook_application():
                             ext = '.docx'
                         elif 'text/plain' in content_type:
                             ext = '.txt'
-                        elif 'filename=' in content_disposition:
+                        
+                        # Check content disposition for filename
+                        if 'filename=' in content_disposition:
                             # Try to extract extension from filename in header
                             fname_match = re.search(r'filename="?([^"]+)"?', content_disposition)
                             if fname_match:
                                 fname = fname_match.group(1)
+                                filename = fname
                                 _, extracted_ext = os.path.splitext(fname)
                                 if extracted_ext:
                                     ext = extracted_ext.lower()
+                        
+                        # Ensure filename has extension
+                        if not os.path.splitext(filename)[1]:
+                            filename = f"{filename}{ext}"
 
-                        # Save temporarily
-                        filename = f"temp_{datetime.now().timestamp()}{ext}"
-                        file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+                        # Save persistently
+                        unique_filename = f"{uuid.uuid4().hex}_{filename}"
+                        file_path = os.path.join(app.config['UPLOAD_FOLDER'], unique_filename)
+                        
                         with open(file_path, 'wb') as f:
                             f.write(response.content)
-                        print(f"Saved file: {filename} ({len(response.content)} bytes)")
-                        print(f"Saved file: {filename} ({len(response.content)} bytes)")
+                        print(f"Saved file: {unique_filename} ({len(response.content)} bytes)")
                     
                         # Parse
                         try:
@@ -534,16 +631,20 @@ def webhook_application():
                                 candidate_info['raw_text'] = f"Resume parsing failed. Resume URL: {resume_url}"
                             resume_text = candidate_info.get('raw_text', '')
                             print(f"Successfully parsed resume: {len(resume_text)} characters")
+                            
+                            # Add file URL for frontend access
+                            candidate_info['file_url'] = f"/uploads/{unique_filename}"
+                            candidate_info['original_filename'] = filename
+                            
                         except Exception as parse_error:
                             print(f"Error parsing resume: {parse_error}")
                             candidate_info['raw_text'] = f"Resume parsing error: {str(parse_error)}\nResume URL: {resume_url}"
                             resume_text = candidate_info['raw_text']
+                            # Still provide file access even if parsing failed
+                            candidate_info['file_url'] = f"/uploads/{unique_filename}"
+                            candidate_info['original_filename'] = filename
                         
-                        # Cleanup
-                        try:
-                            os.remove(file_path)
-                        except:
-                            pass
+                        # Do NOT remove file so it can be viewed later
             except Exception as e:
                 print(f"Error downloading/parsing resume: {e}")
                 # Fallback if download fails
@@ -564,12 +665,14 @@ def webhook_application():
         )
         
         # 3. Score
+        print(f"Scoring candidate with {len(candidate_info.get('skills', []))} skills against JD of length {len(job_description)}")
         score_result = candidate_scorer.score_candidate(
             candidate_info,
             job_description,
             "Job Application", # Generic title if not provided
             ai_analysis=ai_analysis
         )
+        print(f"Score result: {score_result['total_score']} (Skills: {score_result['breakdown']['skills_match']})")
         
         # 4. Save
         saved_candidate = storage_service.save_candidate(score_result)

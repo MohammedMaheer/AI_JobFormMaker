@@ -17,6 +17,48 @@ class CandidateScorer:
     def score_candidate(self, candidate_info: Dict, job_description: str, job_title: str, ai_analysis: Dict = None) -> Dict:
         """Score a candidate against job requirements"""
         
+        # If AI analysis is not provided, try to generate it on the fly if we have an API key
+        # This makes the system more robust by ensuring AI insights are always attempted
+        if not ai_analysis:
+            try:
+                from services.ai_service import analyze_candidate_with_ai
+                # We import here to avoid circular imports
+                ai_analysis = analyze_candidate_with_ai(
+                    candidate_info.get('raw_text', ''), 
+                    job_description
+                )
+            except Exception as e:
+                print(f"Auto-AI analysis failed: {e}")
+
+        # Merge AI extracted data if available to improve scoring accuracy
+        if ai_analysis and 'extracted_data' in ai_analysis:
+            extracted = ai_analysis['extracted_data']
+            
+            # Merge skills from AI and Regex
+            ai_skills = extracted.get('skills', [])
+            if ai_skills:
+                # Normalize and merge
+                current_skills = set(s.lower() for s in candidate_info.get('skills', []))
+                for s in ai_skills:
+                    current_skills.add(s.lower())
+                # Convert back to title case for display
+                candidate_info['skills'] = [s.title() for s in current_skills]
+                
+            # Update experience if AI found it
+            if extracted.get('years_of_experience') is not None:
+                try:
+                    # Only update if we didn't find it or AI found more specific info
+                    if candidate_info.get('experience_years') is None or candidate_info.get('experience_years') == 0:
+                        candidate_info['experience_years'] = float(extracted['years_of_experience'])
+                except:
+                    pass
+            
+            # Update education if AI found it
+            if extracted.get('education_level') and extracted['education_level'] != 'Unknown':
+                # If we have no education data, use AI's finding
+                if not candidate_info.get('education'):
+                    candidate_info['education'] = [{'degree': extracted['education_level']}]
+
         scores = {
             'skills_match': self._score_skills(candidate_info.get('skills', []), job_description),
             'experience': self._score_experience(candidate_info.get('experience_years'), job_description),
@@ -51,7 +93,9 @@ class CandidateScorer:
             'feedback': feedback,
             'grade': self._get_grade(total_score),
             'candidate_name': candidate_info.get('name', 'Unknown'),
-            'candidate_email': candidate_info.get('email', 'N/A')
+            'candidate_email': candidate_info.get('email', 'N/A'),
+            'candidate_phone': candidate_info.get('phone', 'N/A'),
+            'file_url': candidate_info.get('file_url', '')
         }
         
         # Add AI insights if available
@@ -73,20 +117,63 @@ class CandidateScorer:
         job_desc_lower = job_description.lower()
         matched_skills = []
         
+        # Common variations mapping
+        variations = {
+            'js': ['javascript'],
+            'ts': ['typescript'],
+            'py': ['python'],
+            'cpp': ['c++'],
+            'c#': ['csharp', 'c sharp'],
+            'ml': ['machine learning'],
+            'ai': ['artificial intelligence'],
+            'dl': ['deep learning'],
+            'fe': ['frontend', 'front-end'],
+            'be': ['backend', 'back-end'],
+            'fs': ['fullstack', 'full-stack'],
+            'react': ['reactjs', 'react.js'],
+            'node': ['nodejs', 'node.js'],
+            'vue': ['vuejs', 'vue.js']
+        }
+        
         for skill in candidate_skills:
-            if skill.lower() in job_desc_lower:
+            skill_lower = skill.lower()
+            
+            # Direct match
+            if skill_lower in job_desc_lower:
                 matched_skills.append(skill)
-        
-        if not candidate_skills:
+                continue
+                
+            # Check variations
+            if skill_lower in variations:
+                found_var = False
+                for var in variations[skill_lower]:
+                    if var in job_desc_lower:
+                        matched_skills.append(skill)
+                        found_var = True
+                        break
+                if found_var:
+                    continue
+            
+            # Check if skill is a variation of something in JD
+            # e.g. skill="JavaScript", JD="JS"
+            # We iterate over variations map to see if skill is a value
+            for short, longs in variations.items():
+                if skill_lower in longs:
+                    if short in job_desc_lower.split(): # Use split to match whole word "js" not "json"
+                        matched_skills.append(skill)
+                        break
+
+        if not matched_skills:
             return 0.0
+            
+        # Scoring Logic:
+        # Instead of penalizing for extra skills (precision), we reward for finding relevant skills (recall-ish).
+        # We assume finding ~5 relevant skills is a "good" match (100%).
+        # We also give a small bonus for the ratio to encourage relevance.
         
-        match_ratio = len(matched_skills) / len(candidate_skills)
+        count_score = min(len(matched_skills) * 20.0, 100.0) # 5 skills = 100%
         
-        # Bonus for having many relevant skills
-        if len(matched_skills) >= 5:
-            match_ratio = min(1.0, match_ratio + 0.2)
-        
-        return match_ratio * 100
+        return count_score
     
     def _score_experience(self, years: float, job_description: str) -> float:
         """Score based on experience (0-100)"""

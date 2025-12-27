@@ -34,20 +34,32 @@ def analyze_candidate_with_ai(resume_text, job_description, interview_answers=No
             answers_text += f"Q: {q}\nA: {a}\n"
 
     prompt = f"""
-    You are an expert HR recruiter. Analyze this candidate for the following job.
+    You are an expert Senior Recruiter and Hiring Manager. Evaluate this candidate for the specific role described below.
     
-    JOB DESCRIPTION:
-    {job_description[:2000]}
+    JOB TITLE & DESCRIPTION:
+    {job_description[:3000]}
     
-    CANDIDATE RESUME:
-    {resume_text[:2000]}
+    CANDIDATE PROFILE (Resume & Answers):
+    {resume_text[:3000]}
     {answers_text}
     
+    Task: Perform a deep analysis of the candidate's fit and EXTRACT structured data.
+    
+    IMPORTANT: 
+    1. Assume all monetary values are in Indian Rupees (INR) unless explicitly stated otherwise.
+    2. If the resume is unconventional (e.g., code, raw text), infer skills and experience from context.
+    
     Provide a structured analysis in JSON format with the following keys:
-    - "pros": List of strings (key strengths relative to the job)
-    - "cons": List of strings (gaps or weaknesses relative to the job)
-    - "summary": A brief professional summary of the candidate's fit (max 2 sentences)
-    - "score_adjustment": An integer between -10 and +10 to adjust their technical score based on qualitative factors.
+    - "pros": List of 3-5 specific strengths directly relevant to the job requirements.
+    - "cons": List of 3-5 specific gaps, weaknesses, or missing skills relative to the job.
+    - "summary": A professional executive summary of the candidate's fit (2-3 sentences).
+    - "score_adjustment": An integer between -15 and +15.
+    - "extracted_data": {{
+        "skills": ["List", "of", "all", "technical", "skills", "found"],
+        "years_of_experience": <number or 0 if unknown>,
+        "education_level": "PhD|Masters|Bachelors|Unknown",
+        "current_role": "Job Title or Unknown"
+    }}
     
     Return ONLY the JSON.
     """
@@ -160,15 +172,16 @@ def build_prompt(job_description, job_title, num_questions, question_types):
     """Build the prompt for generating interview questions"""
     type_instructions = ""
     if question_types == 'technical':
-        type_instructions = "Focus on technical skills, coding problems, and technical knowledge."
+        type_instructions = "Focus strictly on technical skills, coding challenges, system design, and specific technologies mentioned in the job description."
     elif question_types == 'behavioral':
-        type_instructions = "Focus on behavioral questions using STAR method (Situation, Task, Action, Result)."
+        type_instructions = "Focus strictly on behavioral questions using the STAR method (Situation, Task, Action, Result) to assess soft skills and past experiences."
     elif question_types == 'situational':
-        type_instructions = "Focus on hypothetical situational questions."
+        type_instructions = "Focus strictly on hypothetical scenarios and situational judgment tests relevant to the role."
     else:  # mixed
-        type_instructions = "Include a mix of technical, behavioral, and situational questions."
+        type_instructions = "Include a balanced mix of technical (40%), behavioral (30%), and situational (30%) questions."
     
-    return f"""You are an expert HR professional and interview specialist. Based on the following job description, generate exactly {num_questions} interview questions that would help assess candidates for this role.
+    return f"""You are an expert HR professional and technical recruiter with 20 years of experience. 
+Your task is to generate a set of exactly {num_questions} high-quality, challenging, and role-specific interview questions for the following position.
 
 Job Title: {job_title}
 
@@ -176,23 +189,26 @@ Job Description:
 {job_description}
 
 Instructions:
-1. {type_instructions}
-2. Questions should be relevant to the specific requirements mentioned in the job description.
-3. Include questions that assess both hard skills and soft skills.
-4. Make questions clear, professional, and open-ended.
-5. Vary the difficulty level from basic to advanced.
+1. Generate exactly {num_questions} questions.
+2. {type_instructions}
+3. Questions MUST be directly relevant to the specific requirements, tools, and responsibilities mentioned in the job description. Avoid generic questions.
+4. For technical questions, include specific scenarios or problems to solve, not just definition questions.
+5. For behavioral questions, look for specific examples of past performance.
+6. Ensure a mix of difficulty levels, from fundamental concepts to advanced problem-solving.
+7. The output MUST be valid JSON only.
 
 Return the questions as a JSON array with the following structure:
 [
     {{
-        "question": "The interview question",
+        "question": "The interview question text",
         "category": "technical|behavioral|situational",
         "difficulty": "easy|medium|hard",
-        "expected_skills": ["skill1", "skill2"]
+        "expected_skills": ["skill1", "skill2"],
+        "evaluation_criteria": "Brief note on what a good answer should include"
     }}
 ]
 
-Return ONLY the JSON array, no additional text or markdown formatting."""
+Return ONLY the JSON array, no additional text, no markdown formatting, no explanations."""
 
 
 def call_perplexity(prompt, api_key):
