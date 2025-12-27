@@ -1,139 +1,118 @@
-# 🚀 AI Recruitment Platform - Complete Setup Guide
+# Acceleration Robotics Recruitment Tool
 
-This platform automates the entire recruitment lifecycle:
-1.  **Generates Interview Questions** from Job Descriptions using AI.
-2.  **Creates Google Forms** automatically for candidates to apply.
-3.  **Scores Candidates** by analyzing their Resumes and Answers against the Job Description.
-4.  **Ranks Candidates** in a dashboard.
+A robust, AI-powered recruitment platform that automates candidate screening, resume parsing, and scoring. It integrates seamlessly with Google Forms to collect applications and uses LLMs to rank candidates against job descriptions.
 
----
-
-## 📋 Prerequisites
-
-1.  **Python 3.8+** installed.
-2.  **Ngrok Account** (Free) for exposing your local server to Google Forms.
-3.  **Google Account** for Google Forms & Sheets.
+## Features
+*   **AI-Powered Scoring:** Automatically ranks candidates based on skills, experience, and education match.
+*   **Resume Parsing:** Extracts details from PDF, DOCX, TXT, and HTML resumes.
+*   **Google Forms Integration:** Automatically creates job application forms and syncs responses.
+*   **Candidate Dashboard:** A dark-themed, professional dashboard to view and manage applicants.
+*   **Intelligent Analysis:** Generates pros/cons and executive summaries for every candidate.
 
 ---
 
-## 🛠️ Step 1: Local Environment Setup
+## ⚠️ CRITICAL: Keeping the App Running
 
-1.  **Clone/Download** this repository.
-2.  **Open a terminal** in the project folder.
-3.  **Create a Virtual Environment** (Recommended):
+**If you are running this on your local computer (laptop/desktop):**
+
+1.  **Do Not Close the Terminal:** The window running `python start_with_ngrok.py` must stay open at all times. If you close it, the website goes offline.
+2.  **Disable Sleep Mode:** Your computer must **not** go to sleep or hibernate.
+    *   *Windows:* Settings > System > Power & sleep > Set "Sleep" to "Never".
+    *   *Mac:* System Settings > Lock Screen > Set "Turn display off" to "Never" (or use an app like Amphetamine).
+3.  **Stable Internet:** Your computer needs a continuous internet connection.
+
+**For 24/7 Availability (Recommended for Production):**
+If you need the app to run for days without keeping your computer on, you should deploy it to a cloud provider like **Render**, **Railway**, or **AWS**.
+
+---
+
+## 🛠️ Setup Guide
+
+### 1. Prerequisites
+*   Python 3.8 or higher installed.
+*   A Google Account (for Forms/Sheets).
+*   An Ngrok Account (free) for public access.
+
+### 2. Local Installation
+1.  **Clone the repository:**
     ```bash
-    python -m venv venv
-    # Windows:
-    venv\Scripts\activate
-    # Mac/Linux:
-    source venv/bin/activate
+    git clone https://github.com/acceleration-robotics/recruitment-tool.git
+    cd recruitment-tool
     ```
-4.  **Install Dependencies**:
+
+2.  **Create a virtual environment:**
+    ```bash
+    python -m venv .venv
+    # Windows
+    .venv\Scripts\activate
+    # Mac/Linux
+    source .venv/bin/activate
+    ```
+
+3.  **Install dependencies:**
     ```bash
     pip install -r requirements.txt
     ```
 
----
-
-## 🌐 Step 2: Ngrok Setup (Crucial for Webhooks)
-
-Since Google Forms needs to send data to your local computer, we use Ngrok.
-
-1.  **Sign up** at [ngrok.com](https://ngrok.com).
-2.  **Get your Authtoken** from the dashboard.
-3.  **Run the Start Script**:
+### 3. Ngrok Setup (Required for Public Access)
+1.  Sign up at [ngrok.com](https://ngrok.com).
+2.  Get your **Authtoken** from the dashboard.
+3.  **Run the application:**
     ```bash
     python start_with_ngrok.py
     ```
-4.  **Enter your Authtoken** when prompted (first time only).
-5.  **Copy the Public URL** displayed in the terminal (e.g., `https://your-domain.ngrok-free.dev`).
-    *   *Note: Keep this terminal running!*
+4.  Copy the **Public URL** (e.g., `https://xyz.ngrok-free.app`) displayed in the terminal.
 
----
+### 4. Google Apps Script Integration
+This connects your Google Form to the Python backend.
 
-## 📜 Step 3: Google Apps Script Setup
-
-This script acts as the bridge between Google Forms and your Python App.
-
-1.  **Copy the Code**:
-    *   Open `final_google_script.js` in this project.
-    *   Copy the **entire content**.
-
-2.  **Create Google Script**:
-    *   Go to [script.google.com](https://script.google.com/home).
-    *   Click **New Project**.
-    *   Paste the code into the editor (replace existing code).
-
-3.  **Configure URL**:
-    *   Find the line: `var WEBHOOK_URL = "..."`
-    *   Replace it with your **Ngrok URL** + `/api/webhook/application`.
-    *   *Example:* `var WEBHOOK_URL = "https://your-domain.ngrok-free.dev/api/webhook/application";`
-
-4.  **Deploy as Web App**:
-    *   Click **Deploy** (top right) > **New deployment**.
+1.  Open the App in your browser and click **"Google Apps Script Setup"**.
+2.  **Copy the Code** provided in the modal.
+3.  Go to your Google Form/Sheet -> **Extensions** -> **Apps Script**.
+4.  Paste the code, replacing everything else.
+5.  **Update the Configuration:**
+    *   Find `var WEBHOOK_URL = "..."` at the top.
+    *   Replace it with your Ngrok URL + `/api/webhook/application`.
+    *   Example: `https://your-ngrok-url.ngrok-free.app/api/webhook/application`
+6.  **Save** the script.
+7.  **Run the Setup Trigger (CRITICAL):**
+    *   Select `setupTrigger` from the function dropdown menu.
+    *   Click **Run**.
+    *   **Review Permissions:** You will be asked to grant access.
+    *   **IMPORTANT:** You MUST allow access to **"See, edit, create, and delete all of your Google Drive files"**. This is required to make resume uploads accessible to the AI.
+8.  **Deploy as Web App:**
+    *   Click **Deploy** > **New deployment**.
     *   Select type: **Web app**.
-    *   Description: "Job App v1".
-    *   **Execute as**: "Me" (your email).
-    *   **Who has access**: **Anyone** (Important!).
+    *   Execute as: **Me**.
+    *   Who has access: **Anyone**.
     *   Click **Deploy**.
-    *   **Authorize** the script:
-        1. Click **Review Permissions**.
-        2. Choose your account.
-        3. Click **Advanced** > **Go to ... (unsafe)**.
-        4. Click **Allow**.
-    *   **⚠️ CRITICAL:** You MUST grant **ALL** permissions requested, especially **Google Drive** access. This allows the script to share resume files so the AI can read them.
-
-5.  **Copy the Script URL**:
-    *   Copy the **Web App URL** (ends in `/exec`).
 
 ---
 
-## 🚀 Step 4: Running the Workflow
+## 🚀 Usage Workflow
 
-1.  **Open the App**:
-    *   Go to your Ngrok URL in your browser.
+1.  **Create a Job:**
+    *   Go to the app homepage.
+    *   Paste a Job Description.
+    *   Click **"Generate Questions"**.
+2.  **Create the Form:**
+    *   Review the AI-generated questions.
+    *   Click **"Create Google Form"**.
+    *   The script will generate a form with Resume Upload, Date pickers, and your questions.
+3.  **Candidates Apply:**
+    *   Share the Form URL.
+    *   Candidates fill it out and upload resumes.
+4.  **View Rankings:**
+    *   Go to the **"Candidate Ranking"** page in the app.
+    *   Click **"Refresh Candidates"**.
+    *   See AI scores, summaries, and contact details.
 
-2.  **Generate Questions**:
-    *   Enter a **Job Title** (e.g., "Marketing Manager").
-    *   Paste the **Job Description**.
-    *   Click **Generate Questions**.
+## 🔧 Troubleshooting
 
-3.  **Create the Form**:
-    *   Scroll down to **"Create Job Application Form"**.
-    *   Enter **Company Name**.
-    *   Paste the **Google Apps Script URL** (from Step 3).
-    *   Click **Create Form**.
-
-4.  **Distribute & Apply**:
-    *   Click the **"Open Form"** link generated.
-    *   Fill it out as a candidate (Upload a Resume!).
-    *   Submit.
-
-5.  **View Scores**:
-    *   Go back to your App's **Dashboard** (or `/candidates` page).
-    *   You will see the candidate scored and ranked based on their Resume and Answers!
-
----
-
-## 🧠 How the "Intelligence" Works
-
-*   **Smart Parsing**: The Google Script uses a weighted scoring system to find "Name", "Phone", and "Resume" fields even if you rename them (e.g., "Upload CV" instead of "Resume").
-*   **AI Scoring**: The Python backend uses AI to extract skills, experience, and education from the resume and compares them against the Job Description to calculate a match percentage (0-100%).
-
----
-
-## ⚠️ Troubleshooting
-
-*   **"Skills Match 0%"**: Ensure the Job Description has clear keywords. The system matches Resume Skills vs JD Keywords.
-*   **"Ngrok Error"**: Restart `python start_with_ngrok.py`. Free Ngrok URLs change every time you restart unless you have a static domain.
-*   **"Script Error"**: If you change the Ngrok URL, you MUST update the `WEBHOOK_URL` in the Google Apps Script and **Deploy > Manage Deployments > Edit > New Version**.
-
----
-
-## 📂 Project Structure
-
-*   `app.py`: Main Flask backend.
-*   `final_google_script.js`: The Google Apps Script code.
-*   `services/`: Helper modules for AI, Scoring, and File Processing.
-*   `templates/`: HTML frontend.
+*   **Skills Match is 0%?**
+    *   Ensure the resume is readable. The system now uses a hybrid AI + Keyword approach. If it persists, the resume might be an image scan (OCR is not currently supported).
+*   **Google Drive Warning?**
+    *   The system automatically handles Google's virus scan warnings for large files.
+*   **"ScriptError: Authorization is required"?**
+    *   You didn't run `setupTrigger` or didn't accept the permissions. Go back to the Apps Script editor and run `setupTrigger` again.
 
