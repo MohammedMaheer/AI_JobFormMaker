@@ -1,6 +1,8 @@
 // State management
 let currentQuestions = [];
 let currentJobTitle = '';
+let currentJobDescription = '';
+let uploadedCandidates = [];
 
 // DOM Elements
 const jobForm = document.getElementById('job-form');
@@ -139,6 +141,7 @@ jobForm.addEventListener('submit', async (e) => {
         
         currentQuestions = data.questions;
         currentJobTitle = data.job_title;
+        currentJobDescription = data.job_description || jobDescription || 'Job requirements'; // Store for candidate scoring
         
         displayQuestions(currentQuestions);
         
@@ -367,8 +370,17 @@ document.getElementById('create-application-form-btn').addEventListener('click',
             throw new Error(data.error);
         }
         
-        // Show success
-        document.getElementById('success-message').innerHTML = data.message;
+        // Show success with form link if available
+        let successMsg = 'Job application form created successfully!';
+        if (data.formUrl) {
+            successMsg += `<br><br><a href="${data.formUrl}" target="_blank" class="btn btn-success btn-lg" style="margin-top: 20px;">
+                <i class="fab fa-wpforms"></i> Open Google Form
+            </a>`;
+        } else {
+            successMsg += '<br><br>Check your Google Forms dashboard.';
+        }
+        
+        document.getElementById('success-message').innerHTML = successMsg;
         resultsSection.style.display = 'none';
         successSection.style.display = 'block';
         
@@ -516,6 +528,12 @@ function updateWebhookDatalist() {
 // Initialize history on load
 document.addEventListener('DOMContentLoaded', () => {
     updateWebhookDatalist();
+    
+    // Display full webhook URL
+    const webhookDisplay = document.getElementById('webhook-url-display');
+    if (webhookDisplay) {
+        webhookDisplay.textContent = `${window.location.origin}/api/webhook/application`;
+    }
 });
 
 // Toast Notifications
@@ -547,4 +565,340 @@ function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+}
+
+// ========== CANDIDATE SCORING FUNCTIONALITY ==========
+
+// Candidate Upload Handling
+const candidateUploadArea = document.getElementById('candidate-upload-area');
+const candidateFileInput = document.getElementById('candidate-file-input');
+const candidatesList = document.getElementById('candidates-list');
+const candidatesContainer = document.getElementById('candidates-container');
+const candidateCount = document.getElementById('candidate-count');
+
+if (candidateUploadArea) {
+    candidateUploadArea.addEventListener('click', () => candidateFileInput.click());
+    
+    candidateUploadArea.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        candidateUploadArea.classList.add('dragover');
+    });
+    
+    candidateUploadArea.addEventListener('dragleave', () => {
+        candidateUploadArea.classList.remove('dragover');
+    });
+    
+    candidateUploadArea.addEventListener('drop', async (e) => {
+        e.preventDefault();
+        candidateUploadArea.classList.remove('dragover');
+        
+        const files = Array.from(e.dataTransfer.files);
+        for (const file of files) {
+            await uploadCandidateResume(file);
+        }
+    });
+    
+    candidateFileInput.addEventListener('change', async (e) => {
+        const files = Array.from(e.target.files);
+        for (const file of files) {
+            await uploadCandidateResume(file);
+        }
+        e.target.value = ''; // Reset input
+    });
+}
+
+async function uploadCandidateResume(file) {
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    try {
+        showToast(`Uploading ${file.name}...`, 'info');
+        
+        const response = await fetch('/api/upload-resume', {
+            method: 'POST',
+            body: formData
+        });
+        
+        const data = await response.json();
+        
+        if (data.error) {
+            throw new Error(data.error);
+        }
+        
+        // Add to uploaded candidates
+        uploadedCandidates.push({
+            filename: file.name,
+            info: data.candidate_info
+        });
+        
+        updateCandidatesList();
+        showToast(`${file.name} uploaded successfully!`, 'success');
+        
+    } catch (error) {
+        showToast(`Failed to upload ${file.name}: ${error.message}`, 'error');
+    }
+}
+
+function updateCandidatesList() {
+    if (uploadedCandidates.length === 0) {
+        candidatesList.style.display = 'none';
+        return;
+    }
+    
+    candidatesList.style.display = 'block';
+    candidateCount.textContent = uploadedCandidates.length;
+    
+    candidatesContainer.innerHTML = uploadedCandidates.map((candidate, index) => `
+        <div class="candidate-item">
+            <div class="candidate-info">
+                <i class="fas fa-file-alt"></i>
+                <div>
+                    <strong>${candidate.info.name || candidate.filename}</strong>
+                    <small>${candidate.info.email || 'Email not found'}</small>
+                </div>
+            </div>
+            <button class="btn-remove" onclick="removeCandidate(${index})">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+    `).join('');
+}
+
+function removeCandidate(index) {
+    uploadedCandidates.splice(index, 1);
+    updateCandidatesList();
+    
+    // Hide results if no candidates
+    if (uploadedCandidates.length === 0) {
+        document.getElementById('candidates-results').style.display = 'none';
+    }
+}
+
+// Fetch Applications
+document.getElementById('fetch-candidates-btn')?.addEventListener('click', async () => {
+    const btn = document.getElementById('fetch-candidates-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Fetching...';
+    
+    try {
+        const response = await fetch('/api/candidates');
+        const data = await response.json();
+        
+        if (data.candidates && data.candidates.length > 0) {
+            // Rank candidates
+            const rankResponse = await fetch('/api/rank-candidates', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ candidates: data.candidates })
+            });
+            
+            const rankData = await rankResponse.json();
+            
+            if (rankData.success) {
+                displayRankedCandidates(rankData.ranked_candidates);
+                showToast(`Fetched ${data.candidates.length} applications!`, 'success');
+            }
+        } else {
+            showToast('No applications found.', 'info');
+        }
+    } catch (error) {
+        showToast(`Failed to fetch candidates: ${error.message}`, 'error');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-sync"></i> Fetch Applications from Webhook';
+    }
+});
+
+// Score All Candidates
+document.getElementById('score-all-btn')?.addEventListener('click', async () => {
+    if (uploadedCandidates.length === 0) {
+        // If no uploads, try fetching only
+        document.getElementById('fetch-candidates-btn').click();
+        return;
+    }
+    
+    if (!currentJobDescription || !currentJobTitle) {
+        showToast('Please generate interview questions first to set job requirements', 'error');
+        return;
+    }
+    
+    const btn = document.getElementById('score-all-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Scoring...';
+    
+    try {
+        let allScoredCandidates = [];
+        
+        // 1. Score uploaded candidates
+        for (const candidate of uploadedCandidates) {
+            const response = await fetch('/api/score-candidate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    candidate_info: candidate.info,
+                    job_description: currentJobDescription,
+                    job_title: currentJobTitle
+                })
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                allScoredCandidates.push(data.score);
+            }
+        }
+        
+        // 2. Fetch stored candidates
+        try {
+            const storedResponse = await fetch('/api/candidates');
+            const storedData = await storedResponse.json();
+            if (storedData.candidates) {
+                allScoredCandidates = [...allScoredCandidates, ...storedData.candidates];
+            }
+        } catch (e) {
+            console.log("Could not fetch stored candidates", e);
+        }
+        
+        if (allScoredCandidates.length === 0) {
+            showToast('No candidates to rank', 'warning');
+            return;
+        }
+
+        // 3. Rank all
+        const rankResponse = await fetch('/api/rank-candidates', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ candidates: allScoredCandidates })
+        });
+        
+        const rankData = await rankResponse.json();
+        
+        if (rankData.success) {
+            displayRankedCandidates(rankData.ranked_candidates);
+            showToast('Candidates scored and ranked successfully!', 'success');
+        }
+        
+    } catch (error) {
+        showToast(`Failed to score candidates: ${error.message}`, 'error');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-calculator"></i> Score All Candidates';
+    }
+});
+
+function displayRankedCandidates(rankedCandidates) {
+    const resultsContainer = document.getElementById('ranked-candidates-container');
+    const resultsSection = document.getElementById('candidates-results');
+    
+    resultsSection.style.display = 'block';
+    
+    resultsContainer.innerHTML = rankedCandidates.map(candidate => {
+        const gradeClass = candidate.grade === 'A' ? 'grade-a' : 
+                          candidate.grade === 'B' ? 'grade-b' :
+                          candidate.grade === 'C' ? 'grade-c' : 'grade-d';
+        
+        // AI Analysis Section
+        let aiSection = '';
+        if (candidate.ai_analysis) {
+            aiSection = `
+                <div class="ai-analysis-section">
+                    <h5><i class="fas fa-robot"></i> AI Analysis</h5>
+                    <div class="ai-summary">
+                        <strong>Summary:</strong> ${candidate.ai_analysis.summary}
+                    </div>
+                    <div class="ai-pros-cons">
+                        <div class="ai-pros">
+                            <h6><i class="fas fa-check text-success"></i> Pros</h6>
+                            <ul>
+                                ${candidate.ai_analysis.pros.map(p => `<li>${p}</li>`).join('')}
+                            </ul>
+                        </div>
+                        <div class="ai-cons">
+                            <h6><i class="fas fa-times text-danger"></i> Cons</h6>
+                            <ul>
+                                ${candidate.ai_analysis.cons.map(c => `<li>${c}</li>`).join('')}
+                            </ul>
+                        </div>
+                    </div>
+                    ${candidate.ai_analysis.adjustment ? `
+                        <div class="ai-adjustment">
+                            <small>AI Score Adjustment: <span class="${candidate.ai_analysis.adjustment >= 0 ? 'text-success' : 'text-danger'}">${candidate.ai_analysis.adjustment > 0 ? '+' : ''}${candidate.ai_analysis.adjustment}</span></small>
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+        }
+
+        return `
+            <div class="candidate-score-card">
+                <div class="candidate-rank">
+                    <div class="rank-badge ${candidate.rank <= 3 ? 'top-rank' : ''}">
+                        #${candidate.rank}
+                    </div>
+                </div>
+                <div class="candidate-details">
+                    <h4>${candidate.candidate_name}</h4>
+                    <p class="candidate-email">${candidate.candidate_email}</p>
+                </div>
+                <div class="candidate-score">
+                    <div class="score-circle ${gradeClass}">
+                        <span class="score-value">${candidate.total_score}</span>
+                        <span class="score-grade">${candidate.grade}</span>
+                    </div>
+                </div>
+                <div class="score-breakdown">
+                    <h5>Score Breakdown:</h5>
+                    <div class="breakdown-grid">
+                        <div class="breakdown-item">
+                            <span class="breakdown-label">Skills Match</span>
+                            <div class="progress-bar">
+                                <div class="progress-fill" style="width: ${candidate.breakdown.skills_match}%"></div>
+                            </div>
+                            <span class="breakdown-value">${candidate.breakdown.skills_match}%</span>
+                        </div>
+                        <div class="breakdown-item">
+                            <span class="breakdown-label">Experience</span>
+                            <div class="progress-bar">
+                                <div class="progress-fill" style="width: ${candidate.breakdown.experience}%"></div>
+                            </div>
+                            <span class="breakdown-value">${candidate.breakdown.experience}%</span>
+                        </div>
+                        <div class="breakdown-item">
+                            <span class="breakdown-label">Education</span>
+                            <div class="progress-bar">
+                                <div class="progress-fill" style="width: ${candidate.breakdown.education}%"></div>
+                            </div>
+                            <span class="breakdown-value">${candidate.breakdown.education}%</span>
+                        </div>
+                        <div class="breakdown-item">
+                            <span class="breakdown-label">Keywords</span>
+                            <div class="progress-bar">
+                                <div class="progress-fill" style="width: ${candidate.breakdown.keywords}%"></div>
+                            </div>
+                            <span class="breakdown-value">${candidate.breakdown.keywords}%</span>
+                        </div>
+                        <div class="breakdown-item">
+                            <span class="breakdown-label">Certifications</span>
+                            <div class="progress-bar">
+                                <div class="progress-fill" style="width: ${candidate.breakdown.certifications}%"></div>
+                            </div>
+                            <span class="breakdown-value">${candidate.breakdown.certifications}%</span>
+                        </div>
+                    </div>
+                    
+                    ${aiSection}
+                    
+                    <div class="feedback-section">
+                        <h5>Feedback:</h5>
+                        <ul class="feedback-list">
+                            ${candidate.feedback.map(f => `<li>${f}</li>`).join('')}
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+    
+    // Scroll to results
+    resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }

@@ -11,6 +11,140 @@ CLAUDE_API_URL = "https://api.anthropic.com/v1/messages"
 DEFAULT_PERPLEXITY_KEY = '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'
 
 
+def analyze_candidate_with_ai(resume_text, job_description, interview_answers=None, provider='perplexity', api_key=None):
+    """
+    Analyze a candidate's fit for a job using AI.
+    Returns a dictionary with pros, cons, and analysis.
+    """
+    if not api_key:
+        api_key = get_default_api_key(provider)
+        
+    if not api_key:
+        return {
+            "pros": ["AI analysis unavailable (no API key)"],
+            "cons": ["AI analysis unavailable (no API key)"],
+            "summary": "Could not perform AI analysis."
+        }
+
+    # Prepare the prompt
+    answers_text = ""
+    if interview_answers:
+        answers_text = "\n\nCandidate's Interview Answers:\n"
+        for q, a in interview_answers.items():
+            answers_text += f"Q: {q}\nA: {a}\n"
+
+    prompt = f"""
+    You are an expert HR recruiter. Analyze this candidate for the following job.
+    
+    JOB DESCRIPTION:
+    {job_description[:2000]}
+    
+    CANDIDATE RESUME:
+    {resume_text[:2000]}
+    {answers_text}
+    
+    Provide a structured analysis in JSON format with the following keys:
+    - "pros": List of strings (key strengths relative to the job)
+    - "cons": List of strings (gaps or weaknesses relative to the job)
+    - "summary": A brief professional summary of the candidate's fit (max 2 sentences)
+    - "score_adjustment": An integer between -10 and +10 to adjust their technical score based on qualitative factors.
+    
+    Return ONLY the JSON.
+    """
+
+    try:
+        if provider == 'openai':
+            return _call_openai_analysis(api_key, prompt)
+        elif provider == 'claude':
+            return _call_claude_analysis(api_key, prompt)
+        else:
+            return _call_perplexity_analysis(api_key, prompt)
+            
+    except Exception as e:
+        print(f"AI Analysis Error: {e}")
+        return {
+            "pros": ["Error during AI analysis"],
+            "cons": ["Error during AI analysis"],
+            "summary": "AI analysis failed."
+        }
+
+def _call_perplexity_analysis(api_key, prompt):
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+    data = {
+        "model": "sonar",
+        "messages": [
+            {"role": "system", "content": "You are a helpful HR assistant. Output only valid JSON."},
+            {"role": "user", "content": prompt}
+        ],
+        "temperature": 0.2
+    }
+    
+    response = requests.post(PERPLEXITY_API_URL, headers=headers, json=data)
+    response.raise_for_status()
+    result = response.json()
+    content = result['choices'][0]['message']['content']
+    return _parse_json_response(content)
+
+def _call_openai_analysis(api_key, prompt):
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+    data = {
+        "model": "gpt-4o-mini",
+        "messages": [
+            {"role": "system", "content": "You are a helpful HR assistant. Output only valid JSON."},
+            {"role": "user", "content": prompt}
+        ],
+        "temperature": 0.2,
+        "response_format": {"type": "json_object"}
+    }
+    
+    response = requests.post(OPENAI_API_URL, headers=headers, json=data)
+    response.raise_for_status()
+    result = response.json()
+    content = result['choices'][0]['message']['content']
+    return _parse_json_response(content)
+
+def _call_claude_analysis(api_key, prompt):
+    headers = {
+        "x-api-key": api_key,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json"
+    }
+    data = {
+        "model": "claude-3-haiku-20240307",
+        "max_tokens": 1000,
+        "messages": [
+            {"role": "user", "content": prompt + "\n\nOutput JSON only."}
+        ]
+    }
+    
+    response = requests.post(CLAUDE_API_URL, headers=headers, json=data)
+    response.raise_for_status()
+    result = response.json()
+    content = result['content'][0]['text']
+    return _parse_json_response(content)
+
+def _parse_json_response(content):
+    try:
+        # Clean up markdown code blocks if present
+        if "```json" in content:
+            content = content.split("```json")[1].split("```")[0]
+        elif "```" in content:
+            content = content.split("```")[1].split("```")[0]
+        
+        return json.loads(content.strip())
+    except:
+        return {
+            "pros": ["Could not parse AI response"],
+            "cons": ["Could not parse AI response"],
+            "summary": "Raw output: " + content[:100] + "..."
+        }
+
 def get_default_api_key(provider):
     """Get default API key for a provider"""
     if provider == 'perplexity':

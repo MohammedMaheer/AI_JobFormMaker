@@ -7,9 +7,17 @@ from flask_cors import CORS
 from dotenv import load_dotenv
 import requests
 from services.file_processor import extract_text_from_file
-from services.ai_service import generate_interview_questions
+from services.ai_service import generate_interview_questions, analyze_candidate_with_ai
+from services.resume_parser import ResumeParser
+from services.candidate_scorer import CandidateScorer
+from services.storage_service import StorageService
 
 load_dotenv()
+
+# Initialize services
+resume_parser = ResumeParser()
+candidate_scorer = CandidateScorer()
+storage_service = StorageService()
 
 app = Flask(__name__, static_folder='static', template_folder='templates')
 CORS(app)
@@ -82,7 +90,8 @@ def process_job_description():
         return jsonify({
             'success': True,
             'questions': questions,
-            'job_title': job_title
+            'job_title': job_title,
+            'job_description': job_description
         })
         
     except Exception as e:
@@ -208,14 +217,20 @@ def send_to_zapier():
         # Send to Zapier webhook
         response = requests.post(webhook_url, json=zapier_data, timeout=30)
         
+        print(f"\nWebhook Response Status: {response.status_code}")
+        print(f"Response Content: {response.text[:500]}")
+        
         if response.status_code == 200:
             # Try to parse response for formUrl (from Google Apps Script)
             form_url = None
             try:
                 resp_json = response.json()
+                print(f"Parsed JSON: {resp_json}")
                 if isinstance(resp_json, dict):
                     form_url = resp_json.get('formUrl')
-            except:
+                    print(f"Extracted formUrl: {form_url}")
+            except Exception as e:
+                print(f"Error parsing response: {e}")
                 pass
 
             if form_type == 'application_form':
@@ -318,6 +333,269 @@ def export_txt():
 @app.route('/health')
 def health_check():
     return jsonify({'status': 'healthy'})
+
+
+@app.route('/api/upload-resume', methods=['POST'])
+def upload_resume():
+    """Upload and parse candidate resume"""
+    try:
+        if 'file' not in request.files:
+            return jsonify({'error': 'No file provided'}), 400
+        
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'error': 'No file selected'}), 400
+        
+        if not allowed_file(file.filename):
+            return jsonify({'error': 'Invalid file type. Please upload PDF, DOCX, or TXT'}), 400
+        
+        # Save file
+        filename = file.filename
+        file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        file.save(file_path)
+        
+        # Parse resume
+        candidate_info = resume_parser.parse_resume(file_path, filename)
+        
+        # Clean up file
+        try:
+            os.remove(file_path)
+        except:
+            pass
+        
+        if 'error' in candidate_info:
+            return jsonify({'error': candidate_info['error']}), 400
+        
+        return jsonify({
+            'success': True,
+            'candidate_info': candidate_info
+        })
+        
+    except Exception as e:
+        print(f"Error uploading resume: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/score-candidate', methods=['POST'])
+def score_candidate():
+    """Score a candidate against job requirements"""
+    try:
+        data = request.get_json()
+        candidate_info = data.get('candidate_info', {})
+        job_description = data.get('job_description', '')
+        job_title = data.get('job_title', '')
+        
+        if not candidate_info or not job_description:
+            return jsonify({'error': 'Missing required data'}), 400
+            
+        # Perform AI analysis
+        # We use the raw text from the resume if available, otherwise construct a summary
+        resume_text = candidate_info.get('raw_text', '')
+        if not resume_text:
+            resume_text = json.dumps(candidate_info)
+            
+        ai_analysis = analyze_candidate_with_ai(resume_text, job_description)
+        
+        # Score the candidate
+        score_result = candidate_scorer.score_candidate(
+            candidate_info,
+            job_description,
+            job_title,
+            ai_analysis=ai_analysis
+        )
+        
+        # Save to storage
+        storage_service.save_candidate(score_result)
+        
+        return jsonify({
+            'success': True,
+            'score': score_result
+        })
+        
+    except Exception as e:
+        print(f"Error scoring candidate: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/rank-candidates', methods=['POST'])
+def rank_candidates():
+    """Rank multiple candidates"""
+    try:
+        data = request.get_json()
+        scored_candidates = data.get('candidates', [])
+        
+        if not scored_candidates:
+            return jsonify({'error': 'No candidates provided'}), 400
+        
+        # Rank candidates
+        ranked = candidate_scorer.rank_candidates(scored_candidates)
+        
+        return jsonify({
+            'success': True,
+            'ranked_candidates': ranked
+        })
+        
+    except Exception as e:
+        print(f"Error ranking candidates: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/webhook/application', methods=['POST'])
+def webhook_application():
+    """
+    Webhook to receive job applications from Google Forms/Zapier.
+    Expected JSON:
+    {
+        "name": "John Doe",
+        "email": "john@example.com",
+        "resume_url": "https://...",
+        "job_description": "...",
+        "answers": {"Q1": "A1", ...}
+    }
+    """
+    try:
+        print("\n" + "!"*50)
+        print("WEBHOOK RECEIVED!")
+        print("!"*50 + "\n")
+        data = request.get_json()
+        print(f"Received webhook data: {data.keys()}")
+        
+        name = data.get('name', 'Unknown Candidate')
+        email = data.get('email', '')
+        resume_url = data.get('resume_url')
+        job_description = data.get('job_description', '')
+        answers = data.get('answers', {})
+        
+        # 1. Get Resume Text
+        resume_text = ""
+        candidate_info = {
+            "name": name,
+            "email": email,
+            "raw_text": ""
+        }
+        
+        if resume_url:
+            try:
+                # Fix Google Drive URLs for direct download
+                if 'drive.google.com' in resume_url:
+                    # Extract file ID from various Google Drive URL formats
+                    import re
+                    file_id_match = re.search(r'/d/([a-zA-Z0-9_-]+)', resume_url) or re.search(r'id=([a-zA-Z0-9_-]+)', resume_url)
+                    if file_id_match:
+                        file_id = file_id_match.group(1)
+                        # Use the correct Google Drive direct download URL
+                        resume_url = f"https://drive.google.com/uc?export=download&id={file_id}"
+                        print(f"Converted Google Drive URL: {resume_url}")
+                
+                # Download resume
+                response = requests.get(resume_url, allow_redirects=True, timeout=30)
+                print(f"Download status: {response.status_code}, Content-Type: {response.headers.get('Content-Type')}, Size: {len(response.content)} bytes")
+                
+                if response.status_code == 200:
+                    # Check if we got HTML instead of a file (Google Drive virus scan warning)
+                    if response.content[:100].lower().find(b'<!doctype html') != -1 or response.content[:100].lower().find(b'<html') != -1:
+                        print("WARNING: Received HTML instead of file. Google Drive may require confirmation.")
+                        candidate_info['raw_text'] = f"Resume download blocked by Google Drive. Please use a direct file link or public URL.\nOriginal URL: {resume_url}"
+                        resume_text = candidate_info['raw_text']
+                    else:
+                        # Determine extension from Content-Type or Content-Disposition
+                        content_type = response.headers.get('Content-Type', '').lower()
+                        content_disposition = response.headers.get('Content-Disposition', '')
+                        
+                        ext = '.pdf' # Default
+                        
+                        if 'application/pdf' in content_type:
+                            ext = '.pdf'
+                        elif 'wordprocessingml' in content_type or 'msword' in content_type:
+                            ext = '.docx'
+                        elif 'text/plain' in content_type:
+                            ext = '.txt'
+                        elif 'filename=' in content_disposition:
+                            # Try to extract extension from filename in header
+                            fname_match = re.search(r'filename="?([^"]+)"?', content_disposition)
+                            if fname_match:
+                                fname = fname_match.group(1)
+                                _, extracted_ext = os.path.splitext(fname)
+                                if extracted_ext:
+                                    ext = extracted_ext.lower()
+
+                        # Save temporarily
+                        filename = f"temp_{datetime.now().timestamp()}{ext}"
+                        file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+                        with open(file_path, 'wb') as f:
+                            f.write(response.content)
+                        print(f"Saved file: {filename} ({len(response.content)} bytes)")
+                        print(f"Saved file: {filename} ({len(response.content)} bytes)")
+                    
+                        # Parse
+                        try:
+                            candidate_info = resume_parser.parse_resume(file_path, filename)
+                            if 'raw_text' not in candidate_info or not candidate_info['raw_text']:
+                                candidate_info['raw_text'] = f"Resume parsing failed. Resume URL: {resume_url}"
+                            resume_text = candidate_info.get('raw_text', '')
+                            print(f"Successfully parsed resume: {len(resume_text)} characters")
+                        except Exception as parse_error:
+                            print(f"Error parsing resume: {parse_error}")
+                            candidate_info['raw_text'] = f"Resume parsing error: {str(parse_error)}\nResume URL: {resume_url}"
+                            resume_text = candidate_info['raw_text']
+                        
+                        # Cleanup
+                        try:
+                            os.remove(file_path)
+                        except:
+                            pass
+            except Exception as e:
+                print(f"Error downloading/parsing resume: {e}")
+                # Fallback if download fails
+                candidate_info['raw_text'] = f"Resume URL: {resume_url}"
+                resume_text = candidate_info['raw_text']
+        
+        # If we have answers but no resume text, append answers to text for analysis
+        if answers:
+            answers_text = "\n".join([f"Q: {k}\nA: {v}" for k, v in answers.items()])
+            candidate_info['raw_text'] += f"\n\nInterview Answers:\n{answers_text}"
+            resume_text = candidate_info['raw_text']
+
+        # 2. AI Analysis
+        ai_analysis = analyze_candidate_with_ai(
+            resume_text, 
+            job_description, 
+            interview_answers=answers
+        )
+        
+        # 3. Score
+        score_result = candidate_scorer.score_candidate(
+            candidate_info,
+            job_description,
+            "Job Application", # Generic title if not provided
+            ai_analysis=ai_analysis
+        )
+        
+        # 4. Save
+        saved_candidate = storage_service.save_candidate(score_result)
+        
+        return jsonify({
+            'success': True,
+            'candidate': saved_candidate
+        })
+
+    except Exception as e:
+        print(f"Webhook Error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/candidates', methods=['GET'])
+def get_candidates():
+    """Get all stored candidates"""
+    candidates = storage_service.get_all_candidates()
+    return jsonify({'candidates': candidates})
+
+
+@app.route('/api/candidates', methods=['DELETE'])
+def clear_candidates():
+    """Clear all stored candidates"""
+    storage_service.clear_candidates()
+    return jsonify({'success': True})
 
 
 if __name__ == '__main__':

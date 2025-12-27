@@ -106,3 +106,67 @@ This app is ready for free hosting on Render:
 
 ## 📄 License
 MIT License
+
+---
+
+# Automated AI Job Application & Candidate Scoring Platform
+
+## Overview
+This project automates the process of generating job application forms, collecting candidate responses, and scoring/ranking candidates using AI. It integrates Google Forms, Google Apps Script, and a Python backend (Flask) with AI-powered resume and answer analysis.
+
+## Features
+- **Generate Interview Questions:** Upload or paste a job description to generate tailored interview questions using AI.
+- **Auto-Create Google Forms:** Instantly create Google Forms for job applications with all required fields and questions.
+- **Webhook Integration:** Google Forms responses are sent to your Python backend for processing.
+- **Resume Parsing:** Supports PDF, DOCX, and TXT resumes (uploaded via Google Form file upload).
+- **AI Scoring:** Ranks candidates by matching resumes and answers to the job description.
+- **Admin Dashboard:** View, score, and rank all candidates in a modern web UI.
+
+## Quick Start
+
+### 1. Clone & Install
+```bash
+git clone <your-repo-url>
+cd web_job_ar
+python -m venv .venv
+.venv\Scripts\activate  # On Windows
+pip install -r requirements.txt
+```
+
+### 2. Start the Backend with Ngrok
+```bash
+python start_with_ngrok.py
+```
+- Copy the Webhook URL shown (e.g. `https://xxxx.ngrok-free.dev/api/webhook/application`)
+
+### 3. Google Apps Script Setup
+- Open `final_google_script.js` in VS Code
+- Copy all code
+- Go to [script.google.com](https://script.google.com/home) > New Project
+- Paste the code, set `WEBHOOK_URL` to your Ngrok URL
+- Deploy as **Web App** (execute as Me, access: Anyone)
+- Copy the Web App URL
+
+### 4. Create a Job Application Form
+- Open your Python app in the browser (Ngrok URL)
+- Generate questions and paste the Web App URL in the "Create Job Application Form" section
+- Click "Create Job Application Form"
+- Open the generated Google Form and test it
+
+## Troubleshooting
+- **Resume Parsing Fails:**
+  - Make sure the Google Apps Script sets file sharing to "Anyone with the link" for uploads.
+  - Only new forms created after the script update will work for public file access.
+- **Ngrok Tunnel Issues:**
+  - Ensure you use your Ngrok Auth Token and the tunnel is active.
+- **Google Script Errors:**
+  - Always deploy a new version after updating the script.
+  - Grant all permissions (especially Drive access) when prompted.
+
+## Credits
+- AI by Perplexity, OpenAI, or Claude (configurable)
+- Built with Flask, Google Apps Script, and modern web technologies
+
+## License
+MIT
+

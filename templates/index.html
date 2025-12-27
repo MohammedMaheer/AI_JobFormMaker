@@ -262,6 +262,46 @@
                             <i class="fas fa-plus"></i> Create New Questions
                         </button>
                     </div>
+                    
+                    <!-- Candidate Scoring Section -->
+                    <div class="candidate-scoring-section">
+                        <h3><i class="fas fa-users"></i> Candidate Scoring & Ranking</h3>
+                        <p class="scoring-info">Upload candidate resumes to automatically score and rank them against job requirements</p>
+                        
+                        <div class="tip-box" style="margin-bottom: 1.5rem; font-size: 0.9rem;">
+                            <i class="fas fa-bolt"></i>
+                            <div>
+                                <strong>Automate with Webhooks:</strong>
+                                <p>Send Google Forms responses to: <code id="webhook-url-display">/api/webhook/application</code></p>
+                            </div>
+                        </div>
+                        
+                        <div class="candidate-upload-area" id="candidate-upload-area">
+                            <i class="fas fa-user-plus"></i>
+                            <p>Click or drag to upload candidate resumes</p>
+                            <small>Supports PDF, DOCX, TXT | Multiple files allowed</small>
+                            <input type="file" id="candidate-file-input" accept=".pdf,.docx,.txt" multiple style="display: none;">
+                        </div>
+                        
+                        <div class="candidate-actions" style="margin-top: 1rem; text-align: center;">
+                             <button class="btn btn-secondary" id="fetch-candidates-btn">
+                                <i class="fas fa-sync"></i> Fetch Applications from Webhook
+                            </button>
+                        </div>
+                        
+                        <div class="candidates-list" id="candidates-list" style="display: none;">
+                            <h4>Uploaded Candidates (<span id="candidate-count">0</span>)</h4>
+                            <div id="candidates-container"></div>
+                            <button class="btn btn-primary" id="score-all-btn">
+                                <i class="fas fa-calculator"></i> Score All Candidates
+                            </button>
+                        </div>
+                        
+                        <div class="candidates-results" id="candidates-results" style="display: none;">
+                            <h4><i class="fas fa-trophy"></i> Candidate Rankings</h4>
+                            <div id="ranked-candidates-container"></div>
+                        </div>
+                    </div>
                 </div>
             </section>
 
@@ -500,11 +540,54 @@
                             <p>Delete any existing code and paste this script:</p>
                             <div class="code-block-wrapper">
                                 <button class="copy-btn" id="copy-gas-code">Copy Code</button>
-                                <pre><code id="gas-code">function doPost(e) {
+                                <pre><code id="gas-code">/**
+ * MASTER JOB APPLICATION SCRIPT
+ * 
+ * Features:
+ * 1. Saves generated questions to this Google Sheet.
+ * 2. Creates Google Forms for Job Applications automatically.
+ * 3. Automatically sends Form responses back to your App (Candidate Scoring).
+ * 
+ * SETUP:
+ * 1. Update the WEBHOOK_URL below to your App's URL (e.g. Ngrok or Render).
+ * 2. Deploy as Web App:
+ *    - Click "Deploy" > "New deployment"
+ *    - Select "Web app"
+ *    - Execute as: "Me"
+ *    - Who has access: "Anyone"
+ *    - Click "Deploy" and copy the URL.
+ */
+
+// ================= CONFIGURATION =================
+// Replace with your Python App's URL (Ngrok or Render)
+// Ensure it ends with /api/webhook/application
+var WEBHOOK_URL = "https://patriarchical-conrad-overconservatively.ngrok-free.dev/api/webhook/application";
+// =================================================
+
+/**
+ * MANUAL SETUP TRIGGER
+ * Run this function if you are pasting this script directly into a Google Form.
+ * It will link the form to the 'onFormSubmit' function.
+ */
+function setupTrigger() {
+  try {
+    var form = FormApp.getActiveForm();
+    ScriptApp.newTrigger('onFormSubmit')
+      .forForm(form)
+      .onFormSubmit()
+      .create();
+    Logger.log("Trigger set up successfully! You can now close this tab.");
+  } catch (e) {
+    Logger.log("Error: " + e.toString());
+    Logger.log("If you are running this from a Spreadsheet, this error is expected. Use the Web App deployment instead.");
+  }
+}
+
+function doPost(e) {
   try {
     var data = JSON.parse(e.postData.contents);
     
-    // Check if this is a form creation request
+    // Check action type
     if (data.action === 'create_application_form') {
       return createForm(data);
     } else {
@@ -519,37 +602,61 @@
 }
 
 function createForm(data) {
-  // Create a new Google Form
-  var form = FormApp.create(data.form_title);
-  form.setDescription('Job Application for ' + data.job_title + (data.company_name ? ' at ' + data.company_name : ''));
-  
-  // Add Standard Fields
-  if (data.standard_fields) {
-    data.standard_fields.forEach(function(field) {
-      var item = form.addTextItem();
-      item.setTitle(field.field);
-      if (field.required) item.setRequired(true);
-    });
+  try {
+    // 1. Create the Form
+    var form = FormApp.create(data.form_title);
+    form.setDescription('Job Application for ' + data.job_title + (data.company_name ? ' at ' + data.company_name : ''));
+    
+    // 2. Add Standard Fields
+    if (data.standard_fields) {
+      data.standard_fields.forEach(function(field) {
+        var item;
+        if (field.type === 'text' || field.type === 'email' || field.type === 'url' || field.type === 'phone') {
+          item = form.addTextItem();
+        } else if (field.type === 'number') {
+          item = form.addTextItem(); // FormApp doesn't have specific number item, use text validation if needed
+        } else {
+          item = form.addTextItem();
+        }
+        
+        item.setTitle(field.field);
+        if (field.required) item.setRequired(true);
+      });
+    }
+    
+    // 3. Add Interview Questions
+    form.addPageBreakItem().setTitle('Interview Questions');
+    
+    if (data.interview_questions) {
+      data.interview_questions.forEach(function(q) {
+        form.addParagraphTextItem()
+          .setTitle(q.question)
+          .setHelpText('Category: ' + q.category)
+          .setRequired(true);
+      });
+    }
+    
+    // 4. Set up the Trigger for Automation
+    // This links the new form to the 'onFormSubmit' function in THIS script
+    ScriptApp.newTrigger('onFormSubmit')
+      .forForm(form)
+      .onFormSubmit()
+      .create();
+      
+    // 5. Return the URLs
+    return ContentService.createTextOutput(JSON.stringify({
+      "status": "success",
+      "formUrl": form.getPublishedUrl(),
+      "editUrl": form.getEditUrl(),
+      "message": "Form created and automation trigger linked!"
+    })).setMimeType(ContentService.MimeType.JSON);
+    
+  } catch (e) {
+    return ContentService.createTextOutput(JSON.stringify({
+      "status": "error",
+      "message": e.toString()
+    })).setMimeType(ContentService.MimeType.JSON);
   }
-  
-  // Add Interview Questions Section
-  form.addPageBreakItem().setTitle('Interview Questions');
-  
-  if (data.interview_questions) {
-    data.interview_questions.forEach(function(q) {
-      form.addParagraphTextItem()
-        .setTitle(q.question)
-        .setHelpText('Category: ' + q.category)
-        .setRequired(true);
-    });
-  }
-  
-  // Return the form URL
-  return ContentService.createTextOutput(JSON.stringify({
-    "status": "success",
-    "formUrl": form.getPublishedUrl(),
-    "editUrl": form.getEditUrl()
-  })).setMimeType(ContentService.MimeType.JSON);
 }
 
 function saveToSheet(data) {
@@ -574,6 +681,80 @@ function saveToSheet(data) {
   
   return ContentService.createTextOutput(JSON.stringify({"status": "success"}))
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+/**
+ * Triggered when a candidate submits the form.
+ * Sends data to your Python Backend.
+ */
+function onFormSubmit(e) {
+  try {
+    var formResponse = e.response;
+    var itemResponses = formResponse.getItemResponses();
+    var email = formResponse.getRespondentEmail();
+    
+    var payload = {
+      "name": "Unknown Candidate",
+      "email": email || "",
+      "resume_url": "",
+      "job_description": "Job Application", // You might want to store the JD in the form description or properties
+      "answers": {}
+    };
+
+    // Loop through responses
+    for (var i = 0; i < itemResponses.length; i++) {
+      var itemResponse = itemResponses[i];
+      var item = itemResponse.getItem();
+      var title = item.getTitle();
+      var type = item.getType();
+      var answer = itemResponse.getResponse();
+      var titleLower = title.toLowerCase();
+      
+      if (titleLower.includes("name") && !titleLower.includes("company")) {
+        payload.name = answer;
+      } 
+      else if (titleLower.includes("email") && !payload.email) {
+        payload.email = answer;
+      }
+      // Robust Resume Detection: Check for File Upload Type OR Keywords
+      else if (type === FormApp.ItemType.FILE_UPLOAD || titleLower.includes("resume") || titleLower.includes("cv") || titleLower.includes("upload")) {
+        if (Array.isArray(answer) && answer.length > 0) {
+          // It's a file upload (returns array of IDs)
+          var fileId = answer[0];
+          
+          // Make the file publicly accessible so the Python app can download it
+          try {
+            var file = DriveApp.getFileById(fileId);
+            file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+            Logger.log("Made file public: " + fileId);
+          } catch (shareError) {
+            Logger.log("Could not set file permissions: " + shareError.toString());
+          }
+          
+          payload.resume_url = "https://drive.google.com/uc?export=download&id=" + fileId;
+        } else {
+          // It might be a text field with a URL
+          payload.resume_url = answer;
+        }
+      }
+      else {
+        payload.answers[title] = answer;
+      }
+    }
+
+    // Send to Python Backend
+    var options = {
+      "method": "post",
+      "contentType": "application/json",
+      "payload": JSON.stringify(payload),
+      "muteHttpExceptions": true
+    };
+
+    UrlFetchApp.fetch(WEBHOOK_URL, options);
+    
+  } catch (error) {
+    Logger.log("Error in onFormSubmit: " + error.toString());
+  }
 }</code></pre>
                             </div>
                         </div>
