@@ -26,66 +26,123 @@ If you need the app to run for days without keeping your computer on, you should
 
 ---
 
-## 🛠️ Setup Guide
+## 🛠️ Detailed Setup Guide (Beginner Friendly)
 
-### 1. Prerequisites
-*   Python 3.8 or higher installed.
-*   A Google Account (for Forms/Sheets).
-*   An Ngrok Account (free) for public access.
+Follow these steps exactly to get the system running on your computer.
 
-### 2. Local Installation
-1.  **Clone the repository:**
-    ```bash
-    git clone https://github.com/acceleration-robotics/recruitment-tool.git
-    cd recruitment-tool
-    ```
+### Phase 1: Prepare Your Computer
 
-2.  **Create a virtual environment:**
-    ```bash
-    python -m venv .venv
-    # Windows
-    .venv\Scripts\activate
-    # Mac/Linux
-    source .venv/bin/activate
-    ```
+1.  **Install Python:**
+    *   Download Python from [python.org](https://www.python.org/downloads/).
+    *   **IMPORTANT:** During installation, check the box that says **"Add Python to PATH"**.
+2.  **Install Git (Optional but recommended):**
+    *   Download from [git-scm.com](https://git-scm.com/downloads).
+3.  **Get an Ngrok Account:**
+    *   Go to [ngrok.com](https://ngrok.com) and sign up for a free account.
+    *   Go to your dashboard and copy your **Authtoken**.
 
-3.  **Install dependencies:**
-    ```bash
-    pip install -r requirements.txt
-    ```
+### Phase 2: Install the Application
 
-### 3. Ngrok Setup (Required for Public Access)
-1.  Sign up at [ngrok.com](https://ngrok.com).
-2.  Get your **Authtoken** from the dashboard.
-3.  **Run the application:**
-    ```bash
-    python start_with_ngrok.py
-    ```
-4.  Copy the **Public URL** (e.g., `https://xyz.ngrok-free.app`) displayed in the terminal.
+1.  **Download the Code:**
+    *   If using Git: Open a terminal/command prompt and run:
+        ```bash
+        git clone https://github.com/acceleration-robotics/recruitment-tool.git
+        cd recruitment-tool
+        ```
+    *   If not using Git: Download the ZIP file from GitHub, extract it, and open that folder in VS Code or your terminal.
 
-### 4. Google Apps Script Integration
-This connects your Google Form to the Python backend.
+2.  **Set up the Python Environment:**
+    *   Open your terminal inside the project folder.
+    *   Run the following commands one by one:
+        ```bash
+        # 1. Create a virtual environment (keeps your computer clean)
+        python -m venv .venv
 
-1.  Open the App in your browser and click **"Google Apps Script Setup"**.
-2.  **Copy the Code** provided in the modal.
-3.  Go to your Google Form/Sheet -> **Extensions** -> **Apps Script**.
-4.  Paste the code, replacing everything else.
-5.  **Update the Configuration:**
-    *   Find `var WEBHOOK_URL = "..."` at the top.
-    *   Replace it with your Ngrok URL + `/api/webhook/application`.
-    *   Example: `https://your-ngrok-url.ngrok-free.app/api/webhook/application`
-6.  **Save** the script.
-7.  **Run the Setup Trigger (CRITICAL):**
-    *   Select `setupTrigger` from the function dropdown menu.
-    *   Click **Run**.
-    *   **Review Permissions:** You will be asked to grant access.
-    *   **IMPORTANT:** You MUST allow access to **"See, edit, create, and delete all of your Google Drive files"**. This is required to make resume uploads accessible to the AI.
-8.  **Deploy as Web App:**
-    *   Click **Deploy** > **New deployment**.
-    *   Select type: **Web app**.
-    *   Execute as: **Me**.
-    *   Who has access: **Anyone**.
+        # 2. Activate the environment
+        # Windows:
+        .venv\Scripts\activate
+        # Mac/Linux:
+        source .venv/bin/activate
+
+        # 3. Install required libraries
+        pip install -r requirements.txt
+        ```
+
+### Phase 3: Start the Server
+
+1.  **Run the Start Script:**
+    *   In the same terminal, run:
+        ```bash
+        python start_with_ngrok.py
+        ```
+    *   If it asks for your Ngrok Authtoken, paste it and press Enter.
+
+2.  **Copy the Public URL:**
+    *   The terminal will show a message like:
+        ```
+        ============================================================
+         NGROK TUNNEL ESTABLISHED
+         Public URL: https://a1b2-c3d4.ngrok-free.app
+         Webhook URL: https://a1b2-c3d4.ngrok-free.app/api/webhook/application
+        ============================================================
+        ```
+    *   **Copy the `Webhook URL`**. You will need this for the next step.
+    *   **KEEP THIS TERMINAL OPEN.** Do not close it.
+
+### Phase 4: Connect Google Forms
+
+1.  **Create a New Google Script:**
+    *   Go to [script.google.com](https://script.google.com/home).
+    *   Click **"+ New Project"** (top left).
+
+2.  **Paste the Code:**
+    *   Delete any code currently in the editor (like `function myFunction() {}`).
+    *   Open the file `final_google_script.js` from this project folder.
+    *   Copy **ALL** the code from that file.
+    *   Paste it into the Google Script editor.
+
+3.  **Configure the Webhook:**
+    *   Look at the top of the script for line 22:
+        ```javascript
+        var WEBHOOK_URL = "https://...";
+        ```
+    *   Replace the URL inside the quotes with the **Webhook URL** you copied in Phase 3.
+
+4.  **Run the Setup Trigger (Crucial Step):**
+    *   In the toolbar, look for a dropdown menu that says `createForm` or `myFunction`. Change it to select **`setupTrigger`**.
+    *   Click the **Run** button (▶️).
+    *   **Grant Permissions:**
+        *   A popup will appear saying "Authorization Required". Click **Review Permissions**.
+        *   Select your Google Account.
+        *   You might see a screen saying "Google hasn't verified this app" (because you just wrote it!).
+        *   Click **Advanced** (bottom left).
+        *   Click **Go to Untitled project (unsafe)**.
+        *   Click **Allow**.
+    *   Wait for the execution log to say "Trigger set up successfully".
+
+5.  **Deploy as a Web App:**
+    *   Click the blue **Deploy** button (top right) -> **New deployment**.
+    *   Click the **Gear Icon** (Select type) -> **Web app**.
+    *   **Description:** Enter "Job App".
+    *   **Execute as:** Select **"Me"** (your email).
+    *   **Who has access:** Select **"Anyone"** (This is important so candidates can access it).
     *   Click **Deploy**.
+    *   Copy the **Web App URL** (it ends with `/exec`).
+
+### Phase 5: Use the Tool
+
+1.  **Open the Dashboard:**
+    *   Go to your **Public URL** (from Phase 3) in your browser (e.g., `https://a1b2-c3d4.ngrok-free.app`).
+2.  **Create a Job:**
+    *   Paste a Job Description and click "Generate Questions".
+3.  **Link the Form:**
+    *   Scroll down to the "Create Job Application Form" section.
+    *   Paste the **Web App URL** you copied in Phase 4 (Step 5).
+    *   Click **Create Form**.
+4.  **Done!**
+    *   The system will give you a link to your new Google Form.
+    *   Send this link to candidates.
+    *   When they apply, their data will instantly appear in your Dashboard under "Candidate Ranking".
 
 ---
 
