@@ -59,8 +59,22 @@ class CandidateScorer:
                 if not candidate_info.get('education'):
                     candidate_info['education'] = [{'degree': extracted['education_level']}]
 
+        # Calculate skills score (Hybrid: AI + Keyword)
+        skills_score = self._score_skills(candidate_info.get('skills', []), job_description)
+        
+        if ai_analysis and 'extracted_data' in ai_analysis:
+            ai_skills_score = ai_analysis['extracted_data'].get('skills_match_score')
+            if ai_skills_score is not None:
+                try:
+                    # Weighted average: 60% AI (Semantic), 40% Keyword (Exact)
+                    # This allows "Python" to match "Django" semantically via AI, 
+                    # while still rewarding exact keyword matches.
+                    skills_score = (float(ai_skills_score) * 0.6) + (skills_score * 0.4)
+                except:
+                    pass
+
         scores = {
-            'skills_match': self._score_skills(candidate_info.get('skills', []), job_description),
+            'skills_match': skills_score,
             'experience': self._score_experience(candidate_info.get('experience_years'), job_description),
             'education': self._score_education(candidate_info.get('education', []), job_description),
             'keywords': self._score_keywords(candidate_info.get('raw_text', ''), job_description),

@@ -56,6 +56,7 @@ def analyze_candidate_with_ai(resume_text, job_description, interview_answers=No
     - "score_adjustment": An integer between -15 and +15.
     - "extracted_data": {{
         "skills": ["List", "of", "all", "technical", "skills", "found"],
+        "skills_match_score": <number 0-100 representing how well the candidate's skills match the job requirements>,
         "years_of_experience": <number or 0 if unknown>,
         "education_level": "PhD|Masters|Bachelors|Unknown",
         "current_role": "Job Title or Unknown"
