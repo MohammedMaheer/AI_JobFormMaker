@@ -573,6 +573,14 @@ var WEBHOOK_URL = "https://patriarchical-conrad-overconservatively.ngrok-free.de
  * It will link the form to the 'onFormSubmit' function.
  */
 function setupTrigger() {
+  // 1. Force Authorization for DriveApp (needed to make resumes public)
+  // This line ensures Google asks for Drive permissions when you run this function.
+  try {
+    var _forceAuth = DriveApp.getRootFolder(); 
+  } catch (e) {
+    // Ignore error, we just want to trigger the auth scope
+  }
+
   try {
     var form = FormApp.getActiveForm();
     ScriptApp.newTrigger('onFormSubmit')
