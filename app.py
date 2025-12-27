@@ -577,11 +577,29 @@ def webhook_application():
                         print(f"Converted Google Drive URL: {resume_url}")
                 
                 # Download resume
-                response = requests.get(resume_url, allow_redirects=True, timeout=30)
+                # Use a session to handle cookies for Google Drive virus scan warning
+                session = requests.Session()
+                response = session.get(resume_url, allow_redirects=True, timeout=30)
+                
+                # Check for Google Drive virus scan warning (HTML response)
+                if response.status_code == 200 and ('text/html' in response.headers.get('Content-Type', '').lower()):
+                    # Try to find confirmation token
+                    for key, value in response.cookies.items():
+                        if key.startswith('download_warning'):
+                            # Retry with confirmation token
+                            print(f"Found Google Drive confirmation token: {value}")
+                            params = {'confirm': value}
+                            if 'id=' in resume_url:
+                                # Append to existing params
+                                response = session.get(resume_url + f"&confirm={value}", allow_redirects=True, timeout=30)
+                            else:
+                                response = session.get(resume_url, params=params, allow_redirects=True, timeout=30)
+                            break
+                
                 print(f"Download status: {response.status_code}, Content-Type: {response.headers.get('Content-Type')}, Size: {len(response.content)} bytes")
                 
                 if response.status_code == 200:
-                    # Check if we got HTML instead of a file (Google Drive virus scan warning)
+                    # Check if we STILL got HTML instead of a file
                     if response.content[:100].lower().find(b'<!doctype html') != -1 or response.content[:100].lower().find(b'<html') != -1:
                         print("WARNING: Received HTML instead of file. Google Drive may require confirmation.")
                         candidate_info['raw_text'] = f"Resume download blocked by Google Drive. Please use a direct file link or public URL.\nOriginal URL: {resume_url}"
