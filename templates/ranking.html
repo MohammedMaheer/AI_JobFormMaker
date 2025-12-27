@@ -298,8 +298,15 @@
         function openCandidateModal(candidate) {
             modalCandidateName.textContent = candidate.candidate_name || candidate.name || 'Candidate Details';
             
-            const scoreClass = candidate.total_score >= 80 ? 'score-high' : 
+            let scoreClass = candidate.total_score >= 80 ? 'score-high' : 
                              candidate.total_score >= 60 ? 'score-medium' : 'score-low';
+            
+            let scoreDisplay = `${candidate.total_score || 0}% Match`;
+            
+            if (candidate.parsing_failed) {
+                scoreClass = 'score-medium'; // Neutral color
+                scoreDisplay = 'Manual Review';
+            }
 
             let prosHtml = '';
             let consHtml = '';
@@ -348,9 +355,16 @@
                         </div>
                     </div>
                     <div class="score-badge ${scoreClass}" style="font-size: 1.2rem; padding: 0.5rem 1rem;">
-                        ${candidate.total_score || 0}% Match
+                        ${scoreDisplay}
                     </div>
                 </div>
+
+                ${candidate.parsing_failed ? `
+                <div style="background-color: #fff3cd; color: #856404; padding: 1rem; border-radius: 0.5rem; margin-bottom: 1.5rem; border: 1px solid #ffeeba;">
+                    <i class="fas fa-exclamation-triangle"></i> <strong>Resume Parsing Failed</strong><br>
+                    The system could not automatically read the resume file. Please view the resume manually to evaluate this candidate.
+                </div>
+                ` : ''}
 
                 <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-bottom: 25px;">
                     <div style="background: var(--light-color); padding: 15px; border-radius: 8px; text-align: center;">
@@ -390,8 +404,15 @@
             candidatesList.innerHTML = '';
             
             candidates.forEach((candidate, index) => {
-                const scoreClass = candidate.total_score >= 80 ? 'score-high' : 
+                let scoreClass = candidate.total_score >= 80 ? 'score-high' : 
                                  candidate.total_score >= 60 ? 'score-medium' : 'score-low';
+                
+                let scoreDisplay = `${candidate.total_score || 0}% Match`;
+                
+                if (candidate.parsing_failed) {
+                    scoreClass = 'score-medium';
+                    scoreDisplay = '<i class="fas fa-exclamation-triangle"></i> Manual Review';
+                }
                 
                 const card = document.createElement('div');
                 card.className = 'candidate-card';
@@ -407,11 +428,14 @@
                         <div>
                             <h4>#${index + 1} ${candidate.candidate_name || candidate.name || 'Unknown Candidate'}</h4>
                             <div style="font-size: 0.9rem; color: var(--text-secondary); margin-top: 5px;">
-                                <i class="fas fa-envelope"></i> ${candidate.candidate_email || 'N/A'}
+                                <i class="fas fa-envelope"></i> ${candidate.candidate_email || candidate.email || 'N/A'}
+                            </div>
+                            <div style="font-size: 0.9rem; color: var(--text-secondary); margin-top: 2px;">
+                                <i class="fas fa-phone"></i> ${candidate.candidate_phone || candidate.phone || 'N/A'}
                             </div>
                         </div>
                         <div style="display: flex; align-items: center;">
-                            <span class="score-badge ${scoreClass}">${candidate.total_score || 0}% Match</span>
+                            <span class="score-badge ${scoreClass}">${scoreDisplay}</span>
                         </div>
                     </div>
                     <div class="candidate-details">

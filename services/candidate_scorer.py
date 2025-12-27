@@ -84,8 +84,15 @@ class CandidateScorer:
         # Ensure score is within 0-100
         total_score = max(0.0, min(100.0, total_score))
         
-        # Generate feedback
-        feedback = self._generate_feedback(scores, candidate_info)
+        # Handle parsing failure
+        if candidate_info.get('parsing_failed'):
+            feedback = ["⚠ Resume parsing failed - Manual review required"]
+            # Don't give a 0 score, give a neutral score or indicate error
+            # But for sorting purposes, maybe keep it low but flag it?
+            # Let's keep the calculated score (likely low) but ensure the UI knows.
+        else:
+            # Generate feedback
+            feedback = self._generate_feedback(scores, candidate_info)
         
         result = {
             'total_score': round(total_score, 2),
@@ -95,7 +102,8 @@ class CandidateScorer:
             'candidate_name': candidate_info.get('name', 'Unknown'),
             'candidate_email': candidate_info.get('email', 'N/A'),
             'candidate_phone': candidate_info.get('phone', 'N/A'),
-            'file_url': candidate_info.get('file_url', '')
+            'file_url': candidate_info.get('file_url', ''),
+            'parsing_failed': candidate_info.get('parsing_failed', False)
         }
         
         # Add AI insights if available

@@ -577,7 +577,7 @@ def webhook_application():
                         print(f"Converted Google Drive URL: {resume_url}")
                 
                 # Download resume
-                # Use gdown for robust Google Drive downloading
+                # Hybrid approach: Try gdown first, then robust requests fallback
                 import gdown
                 
                 # Create a temporary file path
@@ -586,34 +586,56 @@ def webhook_application():
                 temp_path = os.path.join(app.config['UPLOAD_FOLDER'], temp_filename)
                 
                 print(f"Attempting download with gdown: {resume_url}")
-                # gdown handles the virus scan warning automatically
-                output_path = gdown.download(resume_url, temp_path, quiet=False, fuzzy=True)
+                response = None
                 
-                if output_path and os.path.exists(output_path):
-                    print(f"gdown download successful: {output_path}")
+                try:
+                    # gdown handles the virus scan warning automatically
+                    output_path = gdown.download(resume_url, temp_path, quiet=False, fuzzy=True)
                     
-                    # Read content to mimic previous flow
-                    with open(output_path, 'rb') as f:
-                        file_content = f.read()
-                    
-                    # Clean up temp file immediately as we will save it properly below
-                    try:
-                        os.remove(output_path)
-                    except:
-                        pass
+                    if output_path and os.path.exists(output_path):
+                        print(f"gdown download successful: {output_path}")
                         
-                    # Mock a response object for compatibility with existing code structure
-                    class MockResponse:
-                        def __init__(self, content):
-                            self.content = content
-                            self.status_code = 200
-                            self.headers = {'Content-Type': 'application/pdf'} # Assume PDF for now
+                        # Read content
+                        with open(output_path, 'rb') as f:
+                            file_content = f.read()
+                        
+                        # Clean up temp file
+                        try:
+                            os.remove(output_path)
+                        except:
+                            pass
+                            
+                        # Mock a response object
+                        class MockResponse:
+                            def __init__(self, content):
+                                self.content = content
+                                self.status_code = 200
+                                self.headers = {'Content-Type': 'application/pdf'} # Assume PDF
+                                self.cookies = {}
+                        
+                        response = MockResponse(file_content)
+                except Exception as gdown_error:
+                    print(f"gdown failed: {gdown_error}")
+                
+                # Fallback if gdown failed or didn't return a file
+                if not response:
+                    print("Falling back to requests with cookie handling...")
+                    session = requests.Session()
+                    response = session.get(resume_url, allow_redirects=True, timeout=30)
                     
-                    response = MockResponse(file_content)
-                else:
-                    print("gdown failed to download file")
-                    # Fallback to requests (though likely to fail if gdown failed)
-                    response = requests.get(resume_url, allow_redirects=True, timeout=30)
+                    # Check for Google Drive virus scan warning (HTML response)
+                    if response.status_code == 200 and ('text/html' in response.headers.get('Content-Type', '').lower()):
+                        # Try to find confirmation token
+                        for key, value in response.cookies.items():
+                            if key.startswith('download_warning'):
+                                # Retry with confirmation token
+                                print(f"Found Google Drive confirmation token: {value}")
+                                params = {'confirm': value}
+                                if 'id=' in resume_url:
+                                    response = session.get(resume_url + f"&confirm={value}", allow_redirects=True, timeout=30)
+                                else:
+                                    response = session.get(resume_url, params=params, allow_redirects=True, timeout=30)
+                                break
                 
                 print(f"Download status: {response.status_code}, Content-Type: {response.headers.get('Content-Type')}, Size: {len(response.content)} bytes")
                 
@@ -663,7 +685,19 @@ def webhook_application():
                     
                         # Parse
                         try:
-                            candidate_info = resume_parser.parse_resume(file_path, filename)
+                            parsed_info = resume_parser.parse_resume(file_path, filename)
+                            
+                            # Merge parsed info but PREFER form data for critical fields
+                            # This prevents "Robotics AI" (from resume text) overwriting "Mohammed Maheer" (from form)
+                            candidate_info.update(parsed_info)
+                            
+                            if name and name != 'Unknown Candidate':
+                                candidate_info['name'] = name
+                            if email:
+                                candidate_info['email'] = email
+                            if phone:
+                                candidate_info['phone'] = phone
+                                
                             if 'raw_text' not in candidate_info or not candidate_info['raw_text']:
                                 candidate_info['raw_text'] = f"Resume parsing failed. Resume URL: {resume_url}"
                             resume_text = candidate_info.get('raw_text', '')
@@ -687,6 +721,9 @@ def webhook_application():
                 # Fallback if download fails
                 candidate_info['raw_text'] = f"Resume URL: {resume_url}"
                 resume_text = candidate_info['raw_text']
+                # Ensure file_url is set so the user can still view it
+                candidate_info['file_url'] = resume_url
+                candidate_info['parsing_failed'] = True
         
         # If we have answers but no resume text, append answers to text for analysis
         if answers:
