@@ -577,24 +577,43 @@ def webhook_application():
                         print(f"Converted Google Drive URL: {resume_url}")
                 
                 # Download resume
-                # Use a session to handle cookies for Google Drive virus scan warning
-                session = requests.Session()
-                response = session.get(resume_url, allow_redirects=True, timeout=30)
+                # Use gdown for robust Google Drive downloading
+                import gdown
                 
-                # Check for Google Drive virus scan warning (HTML response)
-                if response.status_code == 200 and ('text/html' in response.headers.get('Content-Type', '').lower()):
-                    # Try to find confirmation token
-                    for key, value in response.cookies.items():
-                        if key.startswith('download_warning'):
-                            # Retry with confirmation token
-                            print(f"Found Google Drive confirmation token: {value}")
-                            params = {'confirm': value}
-                            if 'id=' in resume_url:
-                                # Append to existing params
-                                response = session.get(resume_url + f"&confirm={value}", allow_redirects=True, timeout=30)
-                            else:
-                                response = session.get(resume_url, params=params, allow_redirects=True, timeout=30)
-                            break
+                # Create a temporary file path
+                ext = '.pdf' # Default assumption
+                temp_filename = f"temp_download_{uuid.uuid4().hex}{ext}"
+                temp_path = os.path.join(app.config['UPLOAD_FOLDER'], temp_filename)
+                
+                print(f"Attempting download with gdown: {resume_url}")
+                # gdown handles the virus scan warning automatically
+                output_path = gdown.download(resume_url, temp_path, quiet=False, fuzzy=True)
+                
+                if output_path and os.path.exists(output_path):
+                    print(f"gdown download successful: {output_path}")
+                    
+                    # Read content to mimic previous flow
+                    with open(output_path, 'rb') as f:
+                        file_content = f.read()
+                    
+                    # Clean up temp file immediately as we will save it properly below
+                    try:
+                        os.remove(output_path)
+                    except:
+                        pass
+                        
+                    # Mock a response object for compatibility with existing code structure
+                    class MockResponse:
+                        def __init__(self, content):
+                            self.content = content
+                            self.status_code = 200
+                            self.headers = {'Content-Type': 'application/pdf'} # Assume PDF for now
+                    
+                    response = MockResponse(file_content)
+                else:
+                    print("gdown failed to download file")
+                    # Fallback to requests (though likely to fail if gdown failed)
+                    response = requests.get(resume_url, allow_redirects=True, timeout=30)
                 
                 print(f"Download status: {response.status_code}, Content-Type: {response.headers.get('Content-Type')}, Size: {len(response.content)} bytes")
                 
