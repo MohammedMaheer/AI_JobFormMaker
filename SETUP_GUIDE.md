@@ -126,6 +126,15 @@ Since Vercel is serverless and has ephemeral storage (files disappear after requ
     *   `DATABASE_URL`: **Paste your Neon Pooled Connection String here.**
     *   `FLASK_ENV`: `production`
     *   `VERCEL`: `1`
+    *   `SECRET_KEY`: `your_random_secret_key`
+
+    **Email Notifications (SMTP)**
+    If you want the system to send confirmation and rejection emails to candidates:
+    *   `SMTP_SERVER`: `smtp.gmail.com`
+    *   `SMTP_PORT`: `587`
+    *   `SENDER_EMAIL`: `your_email@gmail.com`
+    *   `SENDER_PASSWORD`: `your_app_password` (See Step 6)
+    *   `SENDER_NAME`: `Recruitment Team - Acceleration Robotics`
 
 5.  **Deploy**
     *   Click **"Deploy"**.
@@ -134,7 +143,28 @@ Since Vercel is serverless and has ephemeral storage (files disappear after requ
 
 ---
 
-## 5. Google Forms Integration
+## 5. Email Setup (Gmail SMTP)
+
+To enable automated emails (rejection/acceptance/confirmation), you need a Gmail App Password.
+
+1.  **Go to Google Account Settings**
+    *   Visit [myaccount.google.com](https://myaccount.google.com/).
+    *   Go to **Security**.
+
+2.  **Enable 2-Step Verification**
+    *   If not already enabled, turn on **2-Step Verification**.
+
+3.  **Create App Password**
+    *   Search for "App passwords" in the search bar at the top.
+    *   Create a new app password named "Recruitment App".
+    *   Copy the 16-character password (e.g., `abcd efgh ijkl mnop`).
+
+4.  **Add to Environment Variables**
+    *   Use this password for `SENDER_PASSWORD` in your `.env` file (local) and Vercel Environment Variables (production).
+
+---
+
+## 6. Google Forms Integration
 
 Now we connect Google Forms to your deployed Vercel app.
 
@@ -143,8 +173,8 @@ Now we connect Google Forms to your deployed Vercel app.
     *   Give it a title (e.g., "Senior Developer Application").
 
 2.  **Open Script Editor**
-    *   Click the **three dots (⋮)** in the top right.
-    *   Select **"Script editor"** (or Extensions > Apps Script).
+    *   Click the **three dots (⋮)** in the top right corner of the form editor.
+    *   Select **"Script editor"** (or go to **Extensions** > **Apps Script**).
 
 3.  **Install the Script**
     *   Delete any code in `Code.gs`.
@@ -178,7 +208,7 @@ Now we connect Google Forms to your deployed Vercel app.
 
 ---
 
-## 6. Troubleshooting
+## 7. Troubleshooting
 
 ### Resume "Not Found" (404)
 *   **Cause**: Vercel cannot store files locally.
@@ -191,3 +221,7 @@ Now we connect Google Forms to your deployed Vercel app.
 ### "Script function not found"
 *   **Cause**: You didn't save the script before running.
 *   **Solution**: Press Ctrl+S in the Google Apps Script editor before clicking Run.
+
+### Email Sending Failed
+*   **Cause**: Invalid credentials or 2FA not enabled.
+*   **Solution**: Ensure you are using an **App Password**, not your regular Gmail password. Check Vercel logs for SMTP authentication errors.
