@@ -94,6 +94,8 @@ function createForm(data) {
         var item;
         try {
           if (field.type === 'file') {
+            // File Upload requires the form to collect emails
+            try { form.setCollectEmail(true); } catch(e) {}
             item = form.addFileUploadItem();
           } else if (field.type === 'text') {
             item = form.addTextItem();
@@ -132,11 +134,12 @@ function createForm(data) {
           item.setTitle(field.field);
           if (field.required) item.setRequired(true);
         } catch (err) {
+          Logger.log("Error adding field " + field.field + ": " + err);
           // Fallback: If File Upload fails (common restriction), use Text Item for URL
           if (field.type === 'file') {
             item = form.addTextItem();
-            item.setTitle(field.field + " (Link)");
-            item.setHelpText("Please paste a link to your Resume/CV (Google Drive, Dropbox, etc.)");
+            item.setTitle(field.field + " (Upload Unavailable - Paste Link)");
+            item.setHelpText("We could not create a file upload field (likely due to Google permissions). Please paste a link to your Resume/CV (Google Drive, Dropbox, etc.)");
             if (field.required) item.setRequired(true);
           }
         }
@@ -221,7 +224,8 @@ function onFormSubmit(e) {
     // Attempt to get Form Description (Job Description)
     var jobDescription = "Job Application";
     try {
-      var form = FormApp.openById(formResponse.getFormId());
+      // e.source is the Form object itself
+      var form = e.source;
       jobDescription = form.getDescription() || form.getTitle();
     } catch (err) {
       Logger.log("Could not get form description: " + err);
