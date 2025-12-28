@@ -777,7 +777,12 @@ def process_application_background(data, candidate_id=None, base_url=None):
                                 print(f"Successfully parsed resume: {len(resume_text)} characters")
                                 
                                 # Add file URL for frontend access
-                                candidate_info['file_url'] = f"/uploads/{unique_filename}"
+                                # In Vercel/Cloud, local files are ephemeral. Use original URL.
+                                if os.environ.get('VERCEL') or os.environ.get('RAILWAY_ENVIRONMENT'):
+                                    candidate_info['file_url'] = resume_url
+                                else:
+                                    candidate_info['file_url'] = f"/uploads/{unique_filename}"
+                                
                                 candidate_info['original_filename'] = filename
                                 
                             except Exception as parse_error:
@@ -785,7 +790,10 @@ def process_application_background(data, candidate_id=None, base_url=None):
                                 candidate_info['raw_text'] = f"Resume parsing error: {str(parse_error)}\nResume URL: {resume_url}"
                                 resume_text = candidate_info['raw_text']
                                 # Still provide file access even if parsing failed
-                                candidate_info['file_url'] = f"/uploads/{unique_filename}"
+                                if os.environ.get('VERCEL') or os.environ.get('RAILWAY_ENVIRONMENT'):
+                                    candidate_info['file_url'] = resume_url
+                                else:
+                                    candidate_info['file_url'] = f"/uploads/{unique_filename}"
                                 candidate_info['original_filename'] = filename
                             
                             # Do NOT remove file so it can be viewed later
