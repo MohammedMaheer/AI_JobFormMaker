@@ -266,10 +266,12 @@ class StorageService:
         if self.is_postgres:
             cursor = conn.cursor(cursor_factory=RealDictCursor)
             # Postgres timestamp comparison
+            # Cast text timestamp to actual timestamp for comparison
+            # Use make_interval for safe parameter substitution
             cursor.execute('''
                 SELECT * FROM candidates 
                 WHERE email = %s 
-                AND timestamp > (NOW() - INTERVAL '%s minutes')
+                AND timestamp::timestamp > (NOW() - make_interval(mins := %s))
             ''', (email, minutes))
         else:
             cursor = conn.cursor()
