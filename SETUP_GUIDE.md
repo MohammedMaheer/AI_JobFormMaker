@@ -67,7 +67,7 @@ Before starting, ensure you have the following accounts and tools:
 
 5.  **Run Locally**
     ```bash
-    python app.py
+    python start_with_ngrok.py
     ```
     Access the app at `http://localhost:5000`.
 
