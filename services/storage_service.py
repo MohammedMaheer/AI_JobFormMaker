@@ -50,24 +50,34 @@ class StorageService:
         conn = self._get_connection()
         cursor = conn.cursor()
         
-        # Syntax is compatible for this simple table structure
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS candidates (
-                id TEXT PRIMARY KEY,
-                name TEXT,
-                email TEXT,
-                phone TEXT,
-                resume_url TEXT,
-                job_description TEXT,
-                timestamp TEXT,
-                score REAL,
-                skills TEXT,
-                answers TEXT,
-                raw_data TEXT
-            )
-        ''')
-        conn.commit()
-        conn.close()
+        try:
+            # Syntax is compatible for this simple table structure
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS candidates (
+                    id TEXT PRIMARY KEY,
+                    name TEXT,
+                    email TEXT,
+                    phone TEXT,
+                    resume_url TEXT,
+                    job_description TEXT,
+                    timestamp TEXT,
+                    score REAL,
+                    skills TEXT,
+                    answers TEXT,
+                    raw_data TEXT
+                )
+            ''')
+            conn.commit()
+        except Exception as e:
+            # Handle Postgres race condition where type exists but table creation fails
+            if "pg_type_typname_nsp_index" in str(e):
+                print("⚠️ Table creation race condition ignored (type exists).")
+                conn.rollback()
+            else:
+                print(f"❌ Database initialization error: {e}")
+                # Don't raise, just log. If the table doesn't exist, subsequent queries will fail anyway.
+        finally:
+            conn.close()
 
     def _migrate_from_json_if_needed(self):
         conn = self._get_connection()
