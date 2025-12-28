@@ -9,3 +9,4 @@ Werkzeug==3.0.1
 pyngrok==7.1.0
 beautifulsoup4==4.12.3
 gdown==5.1.0
+psycopg2-binary==2.9.9

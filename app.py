@@ -1,17 +1,20 @@
 import os
 import json
 import io
+import tempfile
 from datetime import datetime
 import uuid
 from flask import Flask, request, jsonify, render_template, send_file, Response, send_from_directory
 from flask_cors import CORS
 from dotenv import load_dotenv
 import requests
+import gdown
 from services.file_processor import extract_text_from_file
 from services.ai_service import generate_interview_questions, analyze_candidate_with_ai
 from services.resume_parser import ResumeParser
 from services.candidate_scorer import CandidateScorer
 from services.storage_service import StorageService
+from services.email_service import EmailService
 
 load_dotenv()
 
@@ -19,16 +22,19 @@ load_dotenv()
 resume_parser = ResumeParser()
 candidate_scorer = CandidateScorer()
 storage_service = StorageService()
+email_service = EmailService()
 
 app = Flask(__name__, static_folder='static', template_folder='templates')
 CORS(app)
 
 # Configure upload folder
-UPLOAD_FOLDER = 'uploads'
-ALLOWED_EXTENSIONS = {'pdf', 'docx', 'txt', 'html', 'htm'}
-
-if not os.path.exists(UPLOAD_FOLDER):
-    os.makedirs(UPLOAD_FOLDER)
+# Use /tmp for Vercel/Cloud, or local 'uploads' folder for development
+if os.environ.get('VERCEL') or os.environ.get('RAILWAY_ENVIRONMENT'):
+    UPLOAD_FOLDER = '/tmp'
+else:
+    UPLOAD_FOLDER = 'uploads'
+    if not os.path.exists(UPLOAD_FOLDER):
+        os.makedirs(UPLOAD_FOLDER)
 
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
@@ -531,14 +537,6 @@ def rank_candidates_json():
 def webhook_application():
     """
     Webhook to receive job applications from Google Forms/Zapier.
-    Expected JSON:
-    {
-        "name": "John Doe",
-        "email": "john@example.com",
-        "resume_url": "https://...",
-        "job_description": "...",
-        "answers": {"Q1": "A1", ...}
-    }
     """
     try:
         print("\n" + "!"*50)
@@ -547,6 +545,41 @@ def webhook_application():
         data = request.get_json()
         print(f"Received webhook data: {data.keys()}")
         
+        # Check for duplicates (debounce)
+        email = data.get('email')
+        if email:
+            # Check if we processed this email in the last 2 minutes
+            existing = storage_service.get_recent_candidate_by_email(email, minutes=2)
+            if existing:
+                print(f"⚠️ DUPLICATE DETECTED: Ignoring webhook for {email} (processed recently)")
+                return jsonify({"status": "success", "message": "Duplicate application ignored."}), 200
+
+        # 1. Save Pending Application IMMEDIATELY (Critical for Vercel)
+        candidate_id = save_pending_application(data)
+        
+        # 2. Process Application
+        # For Vercel/Serverless, we must process SYNCHRONOUSLY to ensure it finishes.
+        # Background threads are often killed in serverless environments.
+        base_url = request.url_root 
+        
+        if os.environ.get('VERCEL') or os.environ.get('RAILWAY_ENVIRONMENT'):
+            print("Running in Serverless mode (Synchronous processing)")
+            process_application_background(data, candidate_id, base_url)
+        else:
+            print("Running in Server mode (Background thread)")
+            import threading
+            thread = threading.Thread(target=process_application_background, args=(data, candidate_id, base_url))
+            thread.start()
+        
+        return jsonify({"status": "success", "message": "Application received and processed."}), 200
+
+    except Exception as e:
+        print(f"Error in webhook: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+def save_pending_application(data):
+    """Save raw application data immediately to prevent data loss on serverless"""
+    try:
         name = data.get('name', 'Unknown Candidate')
         email = data.get('email', '')
         phone = data.get('phone', '')
@@ -554,211 +587,267 @@ def webhook_application():
         job_description = data.get('job_description', '')
         answers = data.get('answers', {})
         
-        # 1. Get Resume Text
-        resume_text = ""
-        candidate_info = {
-            "name": name,
-            "email": email,
-            "phone": phone,
-            "raw_text": ""
+        # Create a basic candidate object
+        candidate_data = {
+            'id': f"cand_{int(datetime.now().timestamp())}_{uuid.uuid4().hex[:8]}",
+            'name': name,
+            'email': email,
+            'phone': phone,
+            'resume_url': resume_url,
+            'job_description': job_description,
+            'answers': answers,
+            'timestamp': datetime.now().isoformat(),
+            'total_score': 0,
+            'skills': [],
+            'ai_analysis': {'summary': 'Processing Pending... (Refresh to update)'},
+            'raw_data': data,
+            'status': 'pending'
         }
         
-        if resume_url:
-            try:
-                # Fix Google Drive URLs for direct download
-                if 'drive.google.com' in resume_url:
-                    # Extract file ID from various Google Drive URL formats
-                    import re
-                    file_id_match = re.search(r'/d/([a-zA-Z0-9_-]+)', resume_url) or re.search(r'id=([a-zA-Z0-9_-]+)', resume_url)
-                    if file_id_match:
-                        file_id = file_id_match.group(1)
-                        # Use the correct Google Drive direct download URL
-                        resume_url = f"https://drive.google.com/uc?export=download&id={file_id}"
-                        print(f"Converted Google Drive URL: {resume_url}")
-                
-                # Download resume
-                # Hybrid approach: Try gdown first, then robust requests fallback
-                import gdown
-                
-                # Create a temporary file path
-                ext = '.pdf' # Default assumption
-                temp_filename = f"temp_download_{uuid.uuid4().hex}{ext}"
-                temp_path = os.path.join(app.config['UPLOAD_FOLDER'], temp_filename)
-                
-                print(f"Attempting download with gdown: {resume_url}")
-                response = None
-                
-                try:
-                    # gdown handles the virus scan warning automatically
-                    output_path = gdown.download(resume_url, temp_path, quiet=False, fuzzy=True)
-                    
-                    if output_path and os.path.exists(output_path):
-                        print(f"gdown download successful: {output_path}")
-                        
-                        # Read content
-                        with open(output_path, 'rb') as f:
-                            file_content = f.read()
-                        
-                        # Clean up temp file
-                        try:
-                            os.remove(output_path)
-                        except:
-                            pass
-                            
-                        # Mock a response object
-                        class MockResponse:
-                            def __init__(self, content):
-                                self.content = content
-                                self.status_code = 200
-                                self.headers = {'Content-Type': 'application/pdf'} # Assume PDF
-                                self.cookies = {}
-                        
-                        response = MockResponse(file_content)
-                except Exception as gdown_error:
-                    print(f"gdown failed: {gdown_error}")
-                
-                # Fallback if gdown failed or didn't return a file
-                if not response:
-                    print("Falling back to requests with cookie handling...")
-                    session = requests.Session()
-                    response = session.get(resume_url, allow_redirects=True, timeout=30)
-                    
-                    # Check for Google Drive virus scan warning (HTML response)
-                    if response.status_code == 200 and ('text/html' in response.headers.get('Content-Type', '').lower()):
-                        # Try to find confirmation token
-                        for key, value in response.cookies.items():
-                            if key.startswith('download_warning'):
-                                # Retry with confirmation token
-                                print(f"Found Google Drive confirmation token: {value}")
-                                params = {'confirm': value}
-                                if 'id=' in resume_url:
-                                    response = session.get(resume_url + f"&confirm={value}", allow_redirects=True, timeout=30)
-                                else:
-                                    response = session.get(resume_url, params=params, allow_redirects=True, timeout=30)
-                                break
-                
-                print(f"Download status: {response.status_code}, Content-Type: {response.headers.get('Content-Type')}, Size: {len(response.content)} bytes")
-                
-                if response.status_code == 200:
-                    # Check if we STILL got HTML instead of a file
-                    if response.content[:100].lower().find(b'<!doctype html') != -1 or response.content[:100].lower().find(b'<html') != -1:
-                        print("WARNING: Received HTML instead of file. Google Drive may require confirmation.")
-                        candidate_info['raw_text'] = f"Resume download blocked by Google Drive. Please use a direct file link or public URL.\nOriginal URL: {resume_url}"
-                        resume_text = candidate_info['raw_text']
-                    else:
-                        # Determine extension from Content-Type or Content-Disposition
-                        content_type = response.headers.get('Content-Type', '').lower()
-                        content_disposition = response.headers.get('Content-Disposition', '')
-                        
-                        ext = '.pdf' # Default
-                        filename = "resume" # Default filename base
-                        
-                        if 'application/pdf' in content_type:
-                            ext = '.pdf'
-                        elif 'wordprocessingml' in content_type or 'msword' in content_type:
-                            ext = '.docx'
-                        elif 'text/plain' in content_type:
-                            ext = '.txt'
-                        
-                        # Check content disposition for filename
-                        if 'filename=' in content_disposition:
-                            # Try to extract extension from filename in header
-                            fname_match = re.search(r'filename="?([^"]+)"?', content_disposition)
-                            if fname_match:
-                                fname = fname_match.group(1)
-                                filename = fname
-                                _, extracted_ext = os.path.splitext(fname)
-                                if extracted_ext:
-                                    ext = extracted_ext.lower()
-                        
-                        # Ensure filename has extension
-                        if not os.path.splitext(filename)[1]:
-                            filename = f"{filename}{ext}"
-
-                        # Save persistently
-                        unique_filename = f"{uuid.uuid4().hex}_{filename}"
-                        file_path = os.path.join(app.config['UPLOAD_FOLDER'], unique_filename)
-                        
-                        with open(file_path, 'wb') as f:
-                            f.write(response.content)
-                        print(f"Saved file: {unique_filename} ({len(response.content)} bytes)")
-                    
-                        # Parse
-                        try:
-                            parsed_info = resume_parser.parse_resume(file_path, filename)
-                            
-                            # Merge parsed info but PREFER form data for critical fields
-                            # This prevents "Robotics AI" (from resume text) overwriting "Mohammed Maheer" (from form)
-                            candidate_info.update(parsed_info)
-                            
-                            if name and name != 'Unknown Candidate':
-                                candidate_info['name'] = name
-                            if email:
-                                candidate_info['email'] = email
-                            if phone:
-                                candidate_info['phone'] = phone
-                                
-                            if 'raw_text' not in candidate_info or not candidate_info['raw_text']:
-                                candidate_info['raw_text'] = f"Resume parsing failed. Resume URL: {resume_url}"
-                            resume_text = candidate_info.get('raw_text', '')
-                            print(f"Successfully parsed resume: {len(resume_text)} characters")
-                            
-                            # Add file URL for frontend access
-                            candidate_info['file_url'] = f"/uploads/{unique_filename}"
-                            candidate_info['original_filename'] = filename
-                            
-                        except Exception as parse_error:
-                            print(f"Error parsing resume: {parse_error}")
-                            candidate_info['raw_text'] = f"Resume parsing error: {str(parse_error)}\nResume URL: {resume_url}"
-                            resume_text = candidate_info['raw_text']
-                            # Still provide file access even if parsing failed
-                            candidate_info['file_url'] = f"/uploads/{unique_filename}"
-                            candidate_info['original_filename'] = filename
-                        
-                        # Do NOT remove file so it can be viewed later
-            except Exception as e:
-                print(f"Error downloading/parsing resume: {e}")
-                # Fallback if download fails
-                candidate_info['raw_text'] = f"Resume URL: {resume_url}"
-                resume_text = candidate_info['raw_text']
-                # Ensure file_url is set so the user can still view it
-                candidate_info['file_url'] = resume_url
-                candidate_info['parsing_failed'] = True
-        
-        # If we have answers but no resume text, append answers to text for analysis
-        if answers:
-            answers_text = "\n".join([f"Q: {k}\nA: {v}" for k, v in answers.items()])
-            candidate_info['raw_text'] += f"\n\nInterview Answers:\n{answers_text}"
-            resume_text = candidate_info['raw_text']
-
-        # 2. AI Analysis
-        ai_analysis = analyze_candidate_with_ai(
-            resume_text, 
-            job_description, 
-            interview_answers=answers
-        )
-        
-        # 3. Score
-        print(f"Scoring candidate with {len(candidate_info.get('skills', []))} skills against JD of length {len(job_description)}")
-        score_result = candidate_scorer.score_candidate(
-            candidate_info,
-            job_description,
-            "Job Application", # Generic title if not provided
-            ai_analysis=ai_analysis
-        )
-        print(f"Score result: {score_result['total_score']} (Skills: {score_result['breakdown']['skills_match']})")
-        
-        # 4. Save
-        saved_candidate = storage_service.save_candidate(score_result)
-        
-        return jsonify({
-            'success': True,
-            'candidate': saved_candidate
-        })
-
+        storage_service.save_candidate(candidate_data)
+        print(f"Saved pending application: {candidate_data['id']}")
+        return candidate_data['id']
     except Exception as e:
-        print(f"Webhook Error: {e}")
-        return jsonify({'error': str(e)}), 500
+        print(f"Error saving pending application: {e}")
+        return None
+
+def process_application_background(data, candidate_id=None, base_url=None):
+    """Process the application in the background to avoid timeouts"""
+    with app.app_context():
+        try:
+            name = data.get('name', 'Unknown Candidate')
+            email = data.get('email', '')
+            phone = data.get('phone', '')
+            resume_url = data.get('resume_url')
+            job_description = data.get('job_description', '')
+            answers = data.get('answers', {})
+            
+            # 1. Get Resume Text
+            resume_text = ""
+            candidate_info = {
+                "name": name,
+                "email": email,
+                "phone": phone,
+                "raw_text": ""
+            }
+            
+            if candidate_id:
+                candidate_info['id'] = candidate_id
+
+            
+            if resume_url:
+                try:
+                    # Fix Google Drive URLs for direct download
+                    if 'drive.google.com' in resume_url:
+                        # Extract file ID from various Google Drive URL formats
+                        import re
+                        file_id_match = re.search(r'/d/([a-zA-Z0-9_-]+)', resume_url) or re.search(r'id=([a-zA-Z0-9_-]+)', resume_url)
+                        if file_id_match:
+                            file_id = file_id_match.group(1)
+                            # Use the correct Google Drive direct download URL
+                            resume_url = f"https://drive.google.com/uc?export=download&id={file_id}"
+                            print(f"Converted Google Drive URL: {resume_url}")
+                    
+                    # Download resume
+                    # Hybrid approach: Try gdown first, then robust requests fallback
+                    import gdown
+                    
+                    # Create a temporary file path
+                    ext = '.pdf' # Default assumption
+                    temp_filename = f"temp_download_{uuid.uuid4().hex}{ext}"
+                    temp_path = os.path.join(app.config['UPLOAD_FOLDER'], temp_filename)
+                    
+                    print(f"Attempting download with gdown: {resume_url}")
+                    response = None
+                    
+                    try:
+                        # gdown handles the virus scan warning automatically
+                        output_path = gdown.download(resume_url, temp_path, quiet=False, fuzzy=True)
+                        
+                        if output_path and os.path.exists(output_path):
+                            print(f"gdown download successful: {output_path}")
+                            
+                            # Read content
+                            with open(output_path, 'rb') as f:
+                                file_content = f.read()
+                            
+                            # Clean up temp file
+                            try:
+                                os.remove(output_path)
+                            except:
+                                pass
+                                
+                            # Mock a response object
+                            class MockResponse:
+                                def __init__(self, content):
+                                    self.content = content
+                                    self.status_code = 200
+                                    self.headers = {'Content-Type': 'application/pdf'} # Assume PDF
+                                    self.cookies = {}
+                            
+                            response = MockResponse(file_content)
+                    except Exception as gdown_error:
+                        print(f"gdown failed: {gdown_error}")
+                    
+                    # Fallback if gdown failed or didn't return a file
+                    if not response:
+                        print("Falling back to requests with cookie handling...")
+                        session = requests.Session()
+                        response = session.get(resume_url, allow_redirects=True, timeout=30)
+                        
+                        # Check for Google Drive virus scan warning (HTML response)
+                        if response.status_code == 200 and ('text/html' in response.headers.get('Content-Type', '').lower()):
+                            # Try to find confirmation token
+                            for key, value in response.cookies.items():
+                                if key.startswith('download_warning'):
+                                    # Retry with confirmation token
+                                    print(f"Found Google Drive confirmation token: {value}")
+                                    params = {'confirm': value}
+                                    if 'id=' in resume_url:
+                                        response = session.get(resume_url + f"&confirm={value}", allow_redirects=True, timeout=30)
+                                    else:
+                                        response = session.get(resume_url, params=params, allow_redirects=True, timeout=30)
+                                    break
+                    
+                    print(f"Download status: {response.status_code}, Content-Type: {response.headers.get('Content-Type')}, Size: {len(response.content)} bytes")
+                    
+                    if response.status_code == 200:
+                        # Check if we STILL got HTML instead of a file
+                        if response.content[:100].lower().find(b'<!doctype html') != -1 or response.content[:100].lower().find(b'<html') != -1:
+                            print("WARNING: Received HTML instead of file. Google Drive may require confirmation.")
+                            candidate_info['raw_text'] = f"Resume download blocked by Google Drive. Please use a direct file link or public URL.\nOriginal URL: {resume_url}"
+                            resume_text = candidate_info['raw_text']
+                        else:
+                            # Determine extension from Content-Type or Content-Disposition
+                            content_type = response.headers.get('Content-Type', '').lower()
+                            content_disposition = response.headers.get('Content-Disposition', '')
+                            
+                            ext = '.pdf' # Default
+                            filename = "resume" # Default filename base
+                            
+                            if 'application/pdf' in content_type:
+                                ext = '.pdf'
+                            elif 'wordprocessingml' in content_type or 'msword' in content_type:
+                                ext = '.docx'
+                            elif 'text/plain' in content_type:
+                                ext = '.txt'
+                            
+                            # Check content disposition for filename
+                            if 'filename=' in content_disposition:
+                                # Try to extract extension from filename in header
+                                fname_match = re.search(r'filename="?([^"]+)"?', content_disposition)
+                                if fname_match:
+                                    fname = fname_match.group(1)
+                                    filename = fname
+                                    _, extracted_ext = os.path.splitext(fname)
+                                    if extracted_ext:
+                                        ext = extracted_ext.lower()
+                            
+                            # Ensure filename has extension
+                            if not os.path.splitext(filename)[1]:
+                                filename = f"{filename}{ext}"
+
+                            # Save persistently
+                            unique_filename = f"{uuid.uuid4().hex}_{filename}"
+                            file_path = os.path.join(app.config['UPLOAD_FOLDER'], unique_filename)
+                            
+                            with open(file_path, 'wb') as f:
+                                f.write(response.content)
+                            print(f"Saved file: {unique_filename} ({len(response.content)} bytes)")
+                        
+                            # Parse
+                            try:
+                                parsed_info = resume_parser.parse_resume(file_path, filename)
+                                
+                                # Merge parsed info but PREFER form data for critical fields
+                                # This prevents "Robotics AI" (from resume text) overwriting "Mohammed Maheer" (from form)
+                                candidate_info.update(parsed_info)
+                                
+                                # FORCE override with form data if available
+                                if name and name != 'Unknown Candidate':
+                                    candidate_info['name'] = name
+                                if email:
+                                    candidate_info['email'] = email
+                                if phone:
+                                    candidate_info['phone'] = phone
+                                    
+                                if 'raw_text' not in candidate_info or not candidate_info['raw_text']:
+                                    candidate_info['raw_text'] = f"Resume parsing failed. Resume URL: {resume_url}"
+                                resume_text = candidate_info.get('raw_text', '')
+                                print(f"Successfully parsed resume: {len(resume_text)} characters")
+                                
+                                # Add file URL for frontend access
+                                candidate_info['file_url'] = f"/uploads/{unique_filename}"
+                                candidate_info['original_filename'] = filename
+                                
+                            except Exception as parse_error:
+                                print(f"Error parsing resume: {parse_error}")
+                                candidate_info['raw_text'] = f"Resume parsing error: {str(parse_error)}\nResume URL: {resume_url}"
+                                resume_text = candidate_info['raw_text']
+                                # Still provide file access even if parsing failed
+                                candidate_info['file_url'] = f"/uploads/{unique_filename}"
+                                candidate_info['original_filename'] = filename
+                            
+                            # Do NOT remove file so it can be viewed later
+                except Exception as e:
+                    print(f"Error downloading/parsing resume: {e}")
+                    # Fallback if download fails
+                    candidate_info['raw_text'] = f"Resume URL: {resume_url}"
+                    resume_text = candidate_info['raw_text']
+                    # Ensure file_url is set so the user can still view it
+                    candidate_info['file_url'] = resume_url
+                    candidate_info['parsing_failed'] = True
+            
+            # If we have answers but no resume text, append answers to text for analysis
+            if answers:
+                answers_text = "\n".join([f"Q: {k}\nA: {v}" for k, v in answers.items()])
+                candidate_info['raw_text'] += f"\n\nInterview Answers:\n{answers_text}"
+                resume_text = candidate_info['raw_text']
+
+            # 2. AI Analysis
+            ai_analysis = analyze_candidate_with_ai(
+                resume_text, 
+                job_description, 
+                interview_answers=answers
+            )
+            
+            # 3. Score
+            print(f"Scoring candidate with {len(candidate_info.get('skills', []))} skills against JD of length {len(job_description)}")
+            score_result = candidate_scorer.score_candidate(
+                candidate_info,
+                job_description,
+                "Job Application", # Generic title if not provided
+                ai_analysis=ai_analysis
+            )
+            print(f"Score result: {score_result['total_score']} (Skills: {score_result['breakdown']['skills_match']})")
+            
+            # 4. Save
+            # Ensure we preserve the ID if it was passed
+            if candidate_id:
+                score_result['id'] = candidate_id
+                
+            storage_service.save_candidate(score_result)
+            print("Candidate saved successfully!")
+            
+            # 5. Send Emails
+            # Check if emails were already sent for this ID (to prevent double sending on retries)
+            # We can check if the candidate status was already 'processed' before we started, 
+            # but since we are overwriting, let's just be safe and send.
+            # The duplicate check at the webhook level should prevent this, but as a failsafe:
+            print("Sending notifications...")
+            
+            # Send Candidate Confirmation
+            cand_email = score_result.get('candidate_email') or score_result.get('email')
+            cand_name = score_result.get('candidate_name') or score_result.get('name')
+            
+            if cand_email:
+                email_service.send_candidate_confirmation(cand_email, cand_name)
+            
+            # Send Admin Notification
+            email_service.send_admin_notification(score_result, base_url)
+            
+        except Exception as e:
+            print(f"Error in background processing: {e}")
 
 
 @app.route('/api/candidates', methods=['GET'])
@@ -773,6 +862,94 @@ def clear_candidates():
     """Clear all stored candidates"""
     storage_service.clear_candidates()
     return jsonify({'success': True})
+
+
+@app.route('/api/candidates/<candidate_id>/status', methods=['POST'])
+def update_candidate_status(candidate_id):
+    """Update candidate status (applied, rejected, interview_scheduled)"""
+    data = request.json
+    new_status = data.get('status')
+    
+    if not new_status:
+        return jsonify({'success': False, 'error': 'Status required'}), 400
+        
+    success = storage_service.update_status(candidate_id, new_status)
+    if success:
+        return jsonify({'success': True})
+    else:
+        return jsonify({'success': False, 'error': 'Failed to update status'}), 500
+
+@app.route('/api/reject', methods=['POST'])
+def reject_candidate():
+    """Send rejection email to candidate"""
+    data = request.json
+    email = data.get('email')
+    name = data.get('name')
+    candidate_id = data.get('id') # Optional ID to update status
+    
+    if not email:
+        return jsonify({'success': False, 'error': 'Email required'}), 400
+        
+    success = email_service.send_rejection_email(email, name)
+    
+    # If ID provided, update status to rejected
+    if success and candidate_id:
+        storage_service.update_status(candidate_id, 'rejected')
+        
+    if success:
+        return jsonify({'success': True})
+    else:
+        return jsonify({'success': False, 'error': 'Failed to send email. Check server logs.'}), 500
+
+@app.route('/api/schedule', methods=['POST'])
+def schedule_interview():
+    """Send interview invitation email"""
+    data = request.json
+    email = data.get('email')
+    name = data.get('name')
+    candidate_id = data.get('id')
+    interview_details = data.get('details', {})
+    
+    if not email:
+        return jsonify({'success': False, 'error': 'Email required'}), 400
+        
+    success = email_service.send_interview_invitation(email, name, interview_details)
+    
+    if success and candidate_id:
+        storage_service.update_status(candidate_id, 'interview_scheduled')
+        
+    if success:
+        return jsonify({'success': True})
+    else:
+        return jsonify({'success': False, 'error': 'Failed to send email. Check server logs.'}), 500
+
+@app.route('/api/process/<candidate_id>', methods=['POST'])
+def process_candidate_manual(candidate_id):
+    """Manually trigger processing for a pending candidate"""
+    try:
+        # 1. Get candidate from DB
+        candidates = storage_service.get_all_candidates()
+        candidate = next((c for c in candidates if c['id'] == candidate_id), None)
+        
+        if not candidate:
+            return jsonify({'success': False, 'error': 'Candidate not found'}), 404
+            
+        # 2. Re-construct data object from stored raw_data or fields
+        data = candidate.get('raw_data') or {
+            'name': candidate.get('name'),
+            'email': candidate.get('email'),
+            'phone': candidate.get('phone'),
+            'resume_url': candidate.get('resume_url'),
+            'job_description': candidate.get('job_description'),
+            'answers': candidate.get('answers')
+        }
+        
+        # 3. Run processing synchronously (since user clicked the button)
+        process_application_background(data, candidate_id)
+        
+        return jsonify({'success': True, 'message': 'Candidate processed successfully'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 if __name__ == '__main__':

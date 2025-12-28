@@ -1,21 +1,22 @@
 /* CSS Variables - Acceleration Robotics Theme */
 :root {
-    --primary-color: #2563eb; /* Acceleration Blue */
-    --primary-hover: #1d4ed8;
-    --secondary-color: #94a3b8;
+    --primary-color: #3b82f6; /* Brighter Blue */
+    --primary-hover: #2563eb;
+    --secondary-color: #64748b;
     --success-color: #10b981;
-    --info-color: #3b82f6;
+    --info-color: #0ea5e9;
     --warning-color: #f59e0b;
     --danger-color: #ef4444;
-    --dark-color: #000000;
-    --light-color: #171717; /* Dark Grey for "light" backgrounds in dark mode */
-    --border-color: #333333;
-    --text-primary: #ffffff;
-    --text-secondary: #d4d4d4;
-    --background: #000000; /* Black Background */
-    --card-bg: #111111;
-    --card-shadow: 0 10px 40px rgba(255, 255, 255, 0.05);
-    --transition: all 0.3s ease;
+    --dark-color: #0f172a;
+    --light-color: rgba(255, 255, 255, 0.05); /* Glassy light */
+    --border-color: rgba(255, 255, 255, 0.1);
+    --text-primary: #f8fafc;
+    --text-secondary: #94a3b8;
+    --background: #020617; /* Deep Slate */
+    --card-bg: rgba(30, 41, 59, 0.7); /* Glassy Slate */
+    --card-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.36);
+    --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    --glass-border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 /* Reset & Base */
@@ -27,15 +28,16 @@
 
 body {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-    background: var(--background);
+    background: radial-gradient(circle at top left, #1e293b, #020617);
     min-height: 100vh;
     color: var(--text-primary);
     line-height: 1.6;
+    background-attachment: fixed;
 }
 
 /* Container */
 .container {
-    max-width: 900px;
+    max-width: 1600px; /* Even wider for modern feel */
     margin: 0 auto;
     padding: 2rem;
 }
@@ -104,30 +106,42 @@ body {
 /* Cards */
 .card {
     background: var(--card-bg);
-    border-radius: 16px;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-radius: 24px;
     box-shadow: var(--card-shadow);
-    margin-bottom: 1.5rem;
+    margin-bottom: 2rem;
     overflow: hidden;
-    border: 1px solid var(--border-color);
+    border: var(--glass-border);
 }
 
 .card-header {
-    padding: 1.5rem;
-    border-bottom: 1px solid var(--border-color);
+    padding: 1.5rem 2rem;
+    border-bottom: var(--glass-border);
     display: flex;
     align-items: center;
     gap: 1rem;
     flex-wrap: wrap;
+    background: rgba(255, 255, 255, 0.02);
 }
 
 .card-header h2 {
     flex: 1;
-    font-size: 1.25rem;
-    font-weight: 600;
+    font-size: 1.5rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
 }
 
 .card-body {
-    padding: 1.5rem;
+    padding: 2rem;
+}
+
+/* Gradient Text Utility */
+.text-gradient {
+    background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 50%, #2563eb 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
 }
 
 /* Step Badge */
@@ -162,13 +176,13 @@ body {
 .form-group textarea,
 .form-group select {
     width: 100%;
-    padding: 0.875rem 1rem;
-    border: 2px solid var(--border-color);
-    border-radius: 10px;
+    padding: 1rem 1.25rem;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
     font-size: 1rem;
     font-family: inherit;
     transition: var(--transition);
-    background-color: var(--light-color); /* Darker input bg */
+    background-color: rgba(0, 0, 0, 0.3);
     color: var(--text-primary);
 }
 
@@ -177,7 +191,8 @@ body {
 .form-group select:focus {
     outline: none;
     border-color: var(--primary-color);
-    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2); /* Blue glow */
+    background-color: rgba(0, 0, 0, 0.5);
+    box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.15);
 }
 
 .form-group textarea {
@@ -602,22 +617,26 @@ body {
 }
 
 .modal-content {
-    background: var(--card-bg);
+    background: rgba(15, 23, 42, 0.95);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
     color: var(--text-primary);
-    border: 1px solid var(--border-color);
-    border-radius: 16px;
-    max-width: 700px;
-    width: 100%;
+    border: var(--glass-border);
+    border-radius: 24px;
+    max-width: 1200px;
+    width: 95%;
     max-height: 90vh;
     overflow-y: auto;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
 }
 
 .modal-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 1.25rem 1.5rem;
-    border-bottom: 1px solid var(--border-color);
+    padding: 1.5rem 2rem;
+    border-bottom: var(--glass-border);
+    background: rgba(255, 255, 255, 0.02);
 }
 
 .modal-header h3 {
@@ -934,7 +953,7 @@ body {
 
 /* Modal Large */
 .modal-lg {
-    max-width: 700px;
+    max-width: 1200px;
 }
 
 /* Setup Steps */

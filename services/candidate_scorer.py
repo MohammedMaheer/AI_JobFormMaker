@@ -6,23 +6,24 @@ import re
 
 class CandidateScorer:
     def __init__(self):
+        # Advanced Weighting System - Optimized for Accuracy
         self.weights = {
-            'skills_match': 0.35,
-            'experience': 0.25,
-            'education': 0.20,
-            'keywords': 0.15,
-            'certifications': 0.05
+            'skills_match': 0.25,      # Reduced to prioritize relevance
+            'experience': 0.15,        # Years are less important than relevance
+            'education': 0.10,         # Degree is less critical in modern tech
+            'relevance': 0.25,         # CRITICAL: Context of experience
+            'technical_depth': 0.15,   # CRITICAL: Seniority/Mastery
+            'culture_fit': 0.05,       # Soft skills
+            'keywords': 0.05           # Semantic search backup
         }
     
     def score_candidate(self, candidate_info: Dict, job_description: str, job_title: str, ai_analysis: Dict = None) -> Dict:
-        """Score a candidate against job requirements"""
+        """Score a candidate against job requirements with advanced AI metrics"""
         
-        # If AI analysis is not provided, try to generate it on the fly if we have an API key
-        # This makes the system more robust by ensuring AI insights are always attempted
+        # If AI analysis is not provided, try to generate it on the fly
         if not ai_analysis:
             try:
                 from services.ai_service import analyze_candidate_with_ai
-                # We import here to avoid circular imports
                 ai_analysis = analyze_candidate_with_ai(
                     candidate_info.get('raw_text', ''), 
                     job_description
@@ -30,95 +31,129 @@ class CandidateScorer:
             except Exception as e:
                 print(f"Auto-AI analysis failed: {e}")
 
-        # Merge AI extracted data if available to improve scoring accuracy
+        # Initialize AI-derived metrics with defaults
+        ai_data = {}
         if ai_analysis and 'extracted_data' in ai_analysis:
-            extracted = ai_analysis['extracted_data']
+            ai_data = ai_analysis['extracted_data']
             
-            # Merge skills from AI and Regex
-            ai_skills = extracted.get('skills', [])
+            # Merge skills from AI
+            ai_skills = ai_data.get('skills', [])
             if ai_skills:
-                # Normalize and merge
                 current_skills = set(s.lower() for s in candidate_info.get('skills', []))
                 for s in ai_skills:
                     current_skills.add(s.lower())
-                # Convert back to title case for display
                 candidate_info['skills'] = [s.title() for s in current_skills]
                 
-            # Update experience if AI found it
-            if extracted.get('years_of_experience') is not None:
-                try:
-                    # Only update if we didn't find it or AI found more specific info
-                    if candidate_info.get('experience_years') is None or candidate_info.get('experience_years') == 0:
-                        candidate_info['experience_years'] = float(extracted['years_of_experience'])
-                except:
-                    pass
+            # Update experience/education if missing
+            if ai_data.get('years_of_experience') is not None:
+                if not candidate_info.get('experience_years'):
+                    candidate_info['experience_years'] = float(ai_data['years_of_experience'])
             
-            # Update education if AI found it
-            if extracted.get('education_level') and extracted['education_level'] != 'Unknown':
-                # If we have no education data, use AI's finding
+            if ai_data.get('education_level') and ai_data['education_level'] != 'Unknown':
                 if not candidate_info.get('education'):
-                    candidate_info['education'] = [{'degree': extracted['education_level']}]
+                    candidate_info['education'] = [{'degree': ai_data['education_level']}]
 
-        # Calculate skills score (Hybrid: AI + Keyword)
-        skills_score = self._score_skills(candidate_info.get('skills', []), job_description)
+        # --- 1. Advanced Skills Scoring ---
+        # Base: Keyword Match
+        base_skills_score = self._score_skills(candidate_info.get('skills', []), job_description)
         
-        if ai_analysis and 'extracted_data' in ai_analysis:
-            ai_skills_score = ai_analysis['extracted_data'].get('skills_match_score')
-            if ai_skills_score is not None:
-                try:
-                    # Weighted average: 60% AI (Semantic), 40% Keyword (Exact)
-                    # This allows "Python" to match "Django" semantically via AI, 
-                    # while still rewarding exact keyword matches.
-                    skills_score = (float(ai_skills_score) * 0.6) + (skills_score * 0.4)
-                except:
-                    pass
+        # AI Semantic Match (if available)
+        ai_skills_score = ai_data.get('skills_match_score')
+        if ai_skills_score is not None:
+            # Weighted: 80% AI (Semantic), 20% Keyword (Exact) - Trust AI more
+            skills_score = (float(ai_skills_score) * 0.8) + (base_skills_score * 0.2)
+        else:
+            skills_score = base_skills_score
 
+        # --- 2. Experience & Relevance ---
+        raw_experience_score = self._score_experience(candidate_info.get('experience_years'), job_description)
+        relevance_score = float(ai_data.get('relevance_score', 50)) # Default to neutral if AI fails
+        
+        # --- 3. Technical Depth ---
+        tech_depth_score = float(ai_data.get('technical_depth_score', 50))
+        
+        # --- 4. Culture Fit ---
+        culture_score = float(ai_data.get('culture_fit_score', 50))
+
+        # --- 5. Calculate Components ---
         scores = {
             'skills_match': skills_score,
-            'experience': self._score_experience(candidate_info.get('experience_years'), job_description),
+            'experience': raw_experience_score,
             'education': self._score_education(candidate_info.get('education', []), job_description),
-            'keywords': self._score_keywords(candidate_info.get('raw_text', ''), job_description),
-            'certifications': self._score_certifications(candidate_info.get('certifications', []), job_description)
+            'relevance': relevance_score,
+            'technical_depth': tech_depth_score,
+            'culture_fit': culture_score,
+            'keywords': self._score_keywords(candidate_info.get('raw_text', ''), job_description)
         }
         
-        # Calculate weighted total
-        total_score = sum(scores[key] * self.weights[key] for key in scores)
+        # --- 6. Weighted Total ---
+        total_score = sum(scores[key] * self.weights.get(key, 0) for key in scores)
         
-        # Apply AI adjustment if available
-        ai_adjustment = 0
+        # --- 7. Penalties & Bonuses ---
+        
+        # Penalty: Missing Must-Haves (Stricter)
+        missing_critical = ai_data.get('missing_must_haves', [])
+        if missing_critical:
+            # Penalize 8 points per missing critical skill, max 30 points
+            penalty = min(len(missing_critical) * 8, 30)
+            total_score -= penalty
+            print(f"Applied penalty of {penalty} for missing: {missing_critical}")
+            
+        # Penalty: Low Relevance (Context Mismatch)
+        if relevance_score < 40:
+            penalty = 15
+            total_score -= penalty
+            print(f"Applied penalty of {penalty} for low relevance ({relevance_score})")
+
+        # Penalty: AI Generated Answers
+        ai_prob = float(ai_data.get('ai_generated_probability', 0))
+        if ai_prob > 85: # Only penalize if very high probability (conservative)
+            penalty = 10
+            total_score -= penalty
+            print(f"Applied penalty of {penalty} for suspected AI answers (Prob: {ai_prob}%)")
+        
+        # Bonus: High Relevance + High Depth (Unicorn Candidate)
+        if relevance_score > 90 and tech_depth_score > 90:
+            total_score += 5
+            
+        # Apply generic AI adjustment
         if ai_analysis and 'score_adjustment' in ai_analysis:
             try:
                 ai_adjustment = float(ai_analysis['score_adjustment'])
-                # Clamp adjustment to reasonable range (-15 to +15)
-                ai_adjustment = max(-15.0, min(15.0, ai_adjustment))
                 total_score += ai_adjustment
             except:
                 pass
         
-        # Ensure score is within 0-100
+        # Clamp final score
         total_score = max(0.0, min(100.0, total_score))
         
         # Handle parsing failure
         if candidate_info.get('parsing_failed'):
             feedback = ["⚠ Resume parsing failed - Manual review required"]
-            # Don't give a 0 score, give a neutral score or indicate error
-            # But for sorting purposes, maybe keep it low but flag it?
-            # Let's keep the calculated score (likely low) but ensure the UI knows.
         else:
-            # Generate feedback
             feedback = self._generate_feedback(scores, candidate_info)
+            if missing_critical:
+                feedback.insert(0, f"⚠ Missing Critical Skills: {', '.join(missing_critical[:3])}")
+            if ai_prob > 75:
+                feedback.append(f"⚠ High likelihood of AI-generated answers ({int(ai_prob)}%)")
         
         result = {
             'total_score': round(total_score, 2),
             'breakdown': {k: round(v, 2) for k, v in scores.items()},
             'feedback': feedback,
             'grade': self._get_grade(total_score),
-            'candidate_name': candidate_info.get('name', 'Unknown'),
-            'candidate_email': candidate_info.get('email', 'N/A'),
-            'candidate_phone': candidate_info.get('phone', 'N/A'),
+            'candidate_name': candidate_info.get('name') or candidate_info.get('candidate_name') or 'Unknown',
+            'candidate_email': candidate_info.get('email') or candidate_info.get('candidate_email') or 'N/A',
+            'candidate_phone': candidate_info.get('phone') or candidate_info.get('candidate_phone') or 'N/A',
             'file_url': candidate_info.get('file_url', ''),
-            'parsing_failed': candidate_info.get('parsing_failed', False)
+            'parsing_failed': candidate_info.get('parsing_failed', False),
+            'status': candidate_info.get('status', 'applied'), # Default to 'applied' for Kanban
+            'ai_analysis': ai_analysis # Include full AI analysis for frontend
         }
+        
+        # Preserve ID if it exists
+        if 'id' in candidate_info:
+            result['id'] = candidate_info['id']
         
         # Add AI insights if available
         if ai_analysis:
@@ -126,7 +161,7 @@ class CandidateScorer:
                 'pros': ai_analysis.get('pros', []),
                 'cons': ai_analysis.get('cons', []),
                 'summary': ai_analysis.get('summary', ''),
-                'adjustment': ai_adjustment
+                'adjustment': ai_adjustment if 'ai_adjustment' in locals() else 0
             }
             
         return result
@@ -189,16 +224,23 @@ class CandidateScorer:
             return 0.0
             
         # Scoring Logic:
-        # Instead of penalizing for extra skills (precision), we reward for finding relevant skills (recall-ish).
-        # We assume finding ~5 relevant skills is a "good" match (100%).
-        # We also give a small bonus for the ratio to encourage relevance.
+        # Reward breadth of relevant skills.
+        # We assume finding ~10 relevant skills is a "good" match (100%).
+        # Previously was 5 skills (multiplier 20), now 10 skills (multiplier 10).
         
-        count_score = min(len(matched_skills) * 20.0, 100.0) # 5 skills = 100%
+        count_score = min(len(matched_skills) * 10.0, 100.0) 
+        
+        # Density Bonus: Reward candidates whose skills are MOSTLY relevant
+        # (Avoids "keyword stuffing" where they list 100 skills and 5 match)
+        if len(candidate_skills) > 0:
+            density = len(matched_skills) / len(candidate_skills)
+            if density > 0.5:
+                count_score = min(count_score + 5, 100) # +5% bonus for high relevance density
         
         return count_score
     
     def _score_experience(self, years: float, job_description: str) -> float:
-        """Score based on experience (0-100)"""
+        """Score based on experience (0-100) with bonuses/penalties"""
         if years is None:
             return 50.0  # Neutral score if not specified
         
@@ -207,26 +249,33 @@ class CandidateScorer:
         
         if required_years is None:
             # No specific requirement, score based on general experience
+            # Adjusted scale: Senior is 7+, Mid is 4+
             if years < 1:
-                return 40.0
-            elif years < 3:
-                return 60.0
-            elif years < 5:
-                return 75.0
-            elif years < 10:
-                return 90.0
+                return 30.0
+            elif years < 2:
+                return 50.0
+            elif years < 4:
+                return 70.0
+            elif years < 7:
+                return 85.0
             else:
                 return 100.0
         
         # Score based on how close to required
         if years >= required_years:
-            return 100.0
+            # Bonus for exceeding requirements significantly
+            if years >= required_years + 3:
+                return 100.0 # Cap at 100, but ensures max score
+            elif years >= required_years + 1:
+                return 100.0
+            return 95.0 # Met exact requirement
+            
         elif years >= required_years * 0.75:
-            return 80.0
+            return 75.0 # Close enough
         elif years >= required_years * 0.5:
-            return 60.0
+            return 50.0 # Halfway there - significant penalty
         else:
-            return 40.0
+            return 20.0 # Not close - heavy penalty
     
     def _score_education(self, education: List[Dict], job_description: str) -> float:
         """Score based on education (0-100)"""

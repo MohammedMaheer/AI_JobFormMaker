@@ -1,84 +1,138 @@
-# Acceleration Robotics Recruitment Tool
+# 🚀 Setup Guide: Acceleration Robotics Recruitment Tool
 
-A robust, AI-powered recruitment platform that automates candidate screening, resume parsing, and scoring. It integrates seamlessly with Google Forms to collect applications and uses LLMs to rank candidates against job descriptions.
+This is the **Official Setup Guide** for installing, configuring, and deploying the Recruitment Tool. 
+For a general overview of the project features and architecture, please see [PROJECT_INFO.md](PROJECT_INFO.md).
 
-## Features
-*   **AI-Powered Scoring:** Automatically ranks candidates based on skills, experience, and education match.
-*   **Resume Parsing:** Extracts details from PDF, DOCX, TXT, and HTML resumes.
-*   **Google Forms Integration:** Automatically creates job application forms and syncs responses.
-*   **Candidate Dashboard:** A dark-themed, professional dashboard to view and manage applicants.
-*   **Intelligent Analysis:** Generates pros/cons and executive summaries for every candidate.
-
----
-
-## ⚠️ CRITICAL: Keeping the App Running
-
-**If you are running this on your local computer (laptop/desktop):**
-
-1.  **Do Not Close the Terminal:** The window running `python start_with_ngrok.py` must stay open at all times. If you close it, the website goes offline.
-2.  **Disable Sleep Mode:** Your computer must **not** go to sleep or hibernate.
-    *   *Windows:* Settings > System > Power & sleep > Set "Sleep" to "Never".
-    *   *Mac:* System Settings > Lock Screen > Set "Turn display off" to "Never" (or use an app like Amphetamine).
-3.  **Stable Internet:** Your computer needs a continuous internet connection.
-
-**For 24/7 Availability (Recommended for Production):**
-If you need the app to run for days without keeping your computer on, you should deploy it to a cloud provider like **Render**, **Railway**, or **AWS**.
+**New Features (v2.0):**
+*   ✨ **Glassmorphism UI:** Modern, sleek interface with blur effects and gradients.
+*   🧠 **Advanced AI Scoring:** Improved accuracy with "Relevance" and "Technical Depth" metrics.
+*   📧 **Gmail Integration:** One-click "Compose" button pre-fills candidate details.
+*   ⚖️ **Fairer Ranking:** Penalties for keyword stuffing and AI-generated answers.
 
 ---
 
-## 🛠️ Detailed Setup Guide (Beginner Friendly)
+## 📋 Table of Contents
+1.  [Prerequisites](#1-prerequisites)
+2.  [Installation](#2-installation)
+3.  [Configuration (.env)](#3-configuration-env)
+4.  [Option A: Local Deployment (Recommended for Testing)](#4-option-a-local-deployment-recommended-for-testing)
+5.  [Option B: Cloud Deployment (Recommended for Production)](#5-option-b-cloud-deployment-recommended-for-production)
+6.  [Google Forms Integration (Crucial Step)](#6-google-forms-integration-crucial-step)
+7.  [How to Use the Dashboard](#7-how-to-use-the-dashboard)
+8.  [Troubleshooting](#8-troubleshooting)
 
-Follow these steps exactly to get the system running on your computer.
+---
 
-### Phase 1: Prepare Your Computer
+## 1. Prerequisites
 
-1.  **Install Python:**
-    *   Download Python from [python.org](https://www.python.org/downloads/).
-    *   **IMPORTANT:** During installation, check the box that says **"Add Python to PATH"**.
-2.  **Install Git (Optional but recommended):**
-    *   Download from [git-scm.com](https://git-scm.com/downloads).
-3.  **Get an Ngrok Account:**
-    *   Go to [ngrok.com](https://ngrok.com) and sign up for a free account.
-    *   Go to your dashboard and copy your **Authtoken**.
+Before you start, make sure you have these installed on your computer:
 
-### Phase 2: Install the Application
+1.  **Python (Version 3.8 or higher)**
+    *   Download: [python.org/downloads](https://www.python.org/downloads/)
+    *   **IMPORTANT:** During installation on Windows, check the box **"Add Python to PATH"**.
+2.  **VS Code (Code Editor)**
+    *   Download: [code.visualstudio.com](https://code.visualstudio.com/)
+3.  **Git (Optional but recommended)**
+    *   Download: [git-scm.com](https://git-scm.com/downloads)
+4.  **Ngrok Account (For Local Testing)**
+    *   Sign up: [ngrok.com](https://ngrok.com)
+    *   Get your **Authtoken** from the dashboard.
 
-1.  **Download the Code:**
-    *   If using Git: Open a terminal/command prompt and run:
+---
+
+## 2. Installation
+
+1.  **Download the Code**
+    *   If using Git:
         ```bash
-        git clone https://github.com/acceleration-robotics/recruitment-tool.git
-        cd recruitment-tool
+        git clone https://github.com/your-repo/web_job_ar.git
+        cd web_job_ar
         ```
-    *   If not using Git: Download the ZIP file from GitHub, extract it, and open that folder in VS Code or your terminal.
+    *   If downloading ZIP: Extract the folder and open it in VS Code.
 
-2.  **Set up the Python Environment:**
-    *   Open your terminal inside the project folder.
-    *   Run the following commands one by one:
+2.  **Open Terminal in VS Code**
+    *   Press `Ctrl + ~` (tilde) to open the terminal.
+
+3.  **Create a Virtual Environment**
+    *   This keeps your project dependencies separate from your system.
+    *   **Windows:**
         ```bash
-        # 1. Create a virtual environment (keeps your computer clean)
         python -m venv .venv
-
-        # 2. Activate the environment
-        # Windows:
         .venv\Scripts\activate
-        # Mac/Linux:
-        source .venv/bin/activate
-
-        # 3. Install required libraries
-        pip install -r requirements.txt
         ```
+    *   **Mac/Linux:**
+        ```bash
+        python3 -m venv .venv
+        source .venv/bin/activate
+        ```
+    *   *You should see `(.venv)` appear at the start of your terminal line.*
 
-### Phase 3: Start the Server
+4.  **Install Dependencies**
+    ```bash
+    pip install -r requirements.txt
+    ```
 
-1.  **Run the Start Script:**
-    *   In the same terminal, run:
+---
+
+## 3. Configuration (.env)
+
+You need to set up your API keys and passwords.
+
+1.  Create a new file named `.env` in the root folder (same place as `app.py`).
+2.  Copy and paste the following content into it:
+
+```ini
+# --- AI Configuration ---
+# Choose your AI provider: perplexity (default), openai, or claude
+AI_PROVIDER=perplexity
+
+# 1. Perplexity (Default) - Get key: https://www.perplexity.ai/settings/api
+PERPLEXITY_API_KEY=pplx-xxxxxxxxxxxxxxxxxxxxxxxx
+
+# 2. OpenAI (Optional) - Get key: https://platform.openai.com/api-keys
+# OPENAI_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxx
+# OPENAI_MODEL=gpt-4o  # Optional: Change model (e.g., gpt-4o-mini)
+
+# 3. Claude (Optional) - Get key: https://console.anthropic.com/settings/keys
+# ANTHROPIC_API_KEY=sk-ant-xxxxxxxxxxxxxxxxxxxxxxxx
+# CLAUDE_MODEL=claude-3-5-sonnet-20240620  # Optional: Change model
+
+# --- Server Configuration ---
+FLASK_ENV=development
+PORT=5000
+
+# --- Email Configuration (Gmail) ---
+# 1. Go to Google Account -> Security -> 2-Step Verification (Enable it)
+# 2. Go to "App Passwords" (search for it in security settings)
+# 3. Create a new app password named "Recruitment App"
+# 4. Copy the 16-character code below (remove spaces)
+SMTP_SERVER=smtp.gmail.com
+SMTP_PORT=587
+SENDER_EMAIL=your_email@gmail.com
+SENDER_PASSWORD=your_16_char_app_password
+SENDER_NAME=Your Company Name
+ADMIN_EMAIL=your_email@gmail.com
+
+# --- Database Configuration ---
+# Leave this commented out for Local Testing (it will use a local file)
+# DATABASE_URL=postgresql://...
+```
+
+---
+
+## 4. Option A: Local Deployment (Recommended for Testing)
+
+This runs the app on your computer. You must keep the terminal open for it to work.
+
+1.  **Start the App with Ngrok**
+    *   Run this command in your terminal:
         ```bash
         python start_with_ngrok.py
         ```
-    *   If it asks for your Ngrok Authtoken, paste it and press Enter.
+    *   If it asks for your Ngrok Authtoken, paste it (right-click to paste in some terminals) and press Enter.
 
-2.  **Copy the Public URL:**
-    *   The terminal will show a message like:
+2.  **Copy the Webhook URL**
+    *   The terminal will display a box like this:
         ```
         ============================================================
          NGROK TUNNEL ESTABLISHED
@@ -86,90 +140,116 @@ Follow these steps exactly to get the system running on your computer.
          Webhook URL: https://a1b2-c3d4.ngrok-free.app/api/webhook/application
         ============================================================
         ```
-    *   **Copy the `Webhook URL`**. You will need this for the next step.
-    *   **KEEP THIS TERMINAL OPEN.** Do not close it.
+    *   **COPY the `Webhook URL`**. You need it for the Google Forms step.
+    *   **KEEP THE TERMINAL OPEN.**
 
-### Phase 4: Connect Google Forms
-
-1.  **Create a New Google Script:**
-    *   Go to [script.google.com](https://script.google.com/home).
-    *   Click **"+ New Project"** (top left).
-
-2.  **Paste the Code:**
-    *   Delete any code currently in the editor (like `function myFunction() {}`).
-    *   Open the file `final_google_script.js` from this project folder.
-    *   Copy **ALL** the code from that file.
-    *   Paste it into the Google Script editor.
-
-3.  **Configure the Webhook:**
-    *   Look at the top of the script for line 22:
-        ```javascript
-        var WEBHOOK_URL = "https://...";
-        ```
-    *   Replace the URL inside the quotes with the **Webhook URL** you copied in Phase 3.
-
-4.  **Run the Setup Trigger (Crucial Step):**
-    *   In the toolbar, look for a dropdown menu that says `createForm` or `myFunction`. Change it to select **`setupTrigger`**.
-    *   Click the **Run** button (▶️).
-    *   **Grant Permissions:**
-        *   A popup will appear saying "Authorization Required". Click **Review Permissions**.
-        *   Select your Google Account.
-        *   You might see a screen saying "Google hasn't verified this app" (because you just wrote it!).
-        *   Click **Advanced** (bottom left).
-        *   Click **Go to Untitled project (unsafe)**.
-        *   Click **Allow**.
-    *   Wait for the execution log to say "Trigger set up successfully".
-
-5.  **Deploy as a Web App:**
-    *   Click the blue **Deploy** button (top right) -> **New deployment**.
-    *   Click the **Gear Icon** (Select type) -> **Web app**.
-    *   **Description:** Enter "Job App".
-    *   **Execute as:** Select **"Me"** (your email).
-    *   **Who has access:** Select **"Anyone"** (This is important so candidates can access it).
-    *   Click **Deploy**.
-    *   Copy the **Web App URL** (it ends with `/exec`).
-
-### Phase 5: Use the Tool
-
-1.  **Open the Dashboard:**
-    *   Go to your **Public URL** (from Phase 3) in your browser (e.g., `https://a1b2-c3d4.ngrok-free.app`).
-2.  **Create a Job:**
-    *   Paste a Job Description and click "Generate Questions".
-3.  **Link the Form:**
-    *   Scroll down to the "Create Job Application Form" section.
-    *   Paste the **Web App URL** you copied in Phase 4 (Step 5).
-    *   Click **Create Form**.
-4.  **Done!**
-    *   The system will give you a link to your new Google Form.
-    *   Send this link to candidates.
-    *   When they apply, their data will instantly appear in your Dashboard under "Candidate Ranking".
+3.  **Go to [Section 6: Google Forms Integration](#6-google-forms-integration-crucial-step)** to finish setup.
 
 ---
 
-## 🚀 Usage Workflow
+## 5. Option B: Cloud Deployment (Recommended for Production)
 
-1.  **Create a Job:**
-    *   Go to the app homepage.
-    *   Paste a Job Description.
-    *   Click **"Generate Questions"**.
-2.  **Create the Form:**
-    *   Review the AI-generated questions.
-    *   Click **"Create Google Form"**.
-    *   The script will generate a form with Resume Upload, Date pickers, and your questions.
-3.  **Candidates Apply:**
-    *   Share the Form URL.
-    *   Candidates fill it out and upload resumes.
-4.  **View Rankings:**
-    *   Go to the **"Candidate Ranking"** page in the app.
-    *   Click **"Refresh Candidates"**.
-    *   See AI scores, summaries, and contact details.
+This runs the app 24/7 on the cloud. We use **Neon** for the database and **Vercel** for hosting.
 
-## 🔧 Troubleshooting
+### **Why these tools?**
+*   **Neon:** Gives you a real PostgreSQL database (better than the local file).
+*   **Vercel:** Hosts your Python code for free.
+*   **Note:** Vercel is "Serverless". This means it might be slightly slower to "wake up" than your local computer, but it's free and always on.
 
-*   **Skills Match is 0%?**
-    *   Ensure the resume is readable. The system now uses a hybrid AI + Keyword approach. If it persists, the resume might be an image scan (OCR is not currently supported).
-*   **Google Drive Warning?**
-    *   The system automatically handles Google's virus scan warnings for large files.
-*   **"ScriptError: Authorization is required"?**
-    *   You didn't run `setupTrigger` or didn't accept the permissions. Go back to the Apps Script editor and run `setupTrigger` again.
+1.  **Database Setup (Neon)**
+    *   Go to [Neon.tech](https://neon.tech) and create a free project.
+    *   Copy the **Connection String** (e.g., `postgres://user:pass@...`).
+    *   **Important:** Ensure the URL ends with `?sslmode=require` (Neon usually adds this automatically).
+
+2.  **Deploy to Vercel**
+    *   Push your code to GitHub.
+    *   Go to [Vercel](https://vercel.com) -> Add New Project -> Import your repo.
+    *   **Environment Variables:** Add all the variables from your `.env` file:
+        *   `AI_PROVIDER` (e.g., `perplexity`)
+        *   `PERPLEXITY_API_KEY` (or others)
+        *   `SMTP_SERVER`, `SMTP_PORT`, `SENDER_EMAIL`, `SENDER_PASSWORD`, `SENDER_NAME`, `ADMIN_EMAIL`
+        *   **`DATABASE_URL`**: Paste your Neon connection string here.
+    *   Click **Deploy**.
+
+3.  **Get Webhook URL**
+    *   Once deployed, your URL will be `https://your-project.vercel.app`.
+    *   Your Webhook URL is `https://your-project.vercel.app/api/webhook/application`.
+
+4.  **Go to [Section 6: Google Forms Integration](#6-google-forms-integration-crucial-step)** to finish setup.
+
+---
+
+## 6. Google Forms Integration (Crucial Step)
+
+This connects Google Forms to your Python app.
+
+1.  **Create a Google Script**
+    *   Go to [script.google.com](https://script.google.com/home).
+    *   Click **+ New Project**.
+
+2.  **Paste the Code**
+    *   Open `final_google_script.js` in your VS Code.
+    *   Copy **ALL** the code.
+    *   Paste it into the Google Script editor (delete any existing code there).
+
+3.  **Update the Webhook URL**
+    *   Look at line 22 in the Google Script:
+        ```javascript
+        var WEBHOOK_URL = "PASTE_YOUR_WEBHOOK_URL_HERE";
+        ```
+    *   Replace the text with the URL you got from **Option A** (Ngrok) or **Option B** (Vercel).
+
+4.  **Run Setup Trigger**
+    *   In the toolbar dropdown, select **`setupTrigger`**.
+    *   Click **Run** (▶️).
+    *   **Permissions:**
+        *   Click "Review Permissions".
+        *   Select your account.
+        *   Click "Advanced" -> "Go to (unsafe)" -> "Allow".
+    *   Wait for it to finish.
+
+5.  **Deploy as Web App**
+    *   Click **Deploy** (blue button) -> **New deployment**.
+    *   Select type: **Web app**.
+    *   Description: "Job App".
+    *   Execute as: **Me**.
+    *   Who has access: **Anyone** (Important!).
+    *   Click **Deploy**.
+    *   **Copy the Web App URL**.
+
+---
+
+## 7. How to Use the Dashboard
+
+1.  **Access the Dashboard**
+    *   **Local:** `http://127.0.0.1:5000/ranking`
+    *   **Cloud:** `https://your-project.vercel.app/ranking`
+
+2.  **View Candidates**
+    *   Candidates appear in a list sorted by **AI Score**.
+    *   **Score Breakdown:** Hover over the score to see details (Skills, Experience, Relevance, Depth).
+    *   **Click on a candidate** to open the **Detailed View**:
+        *   **Pros & Cons:** Displayed side-by-side for quick comparison.
+        *   **Resume:** Embedded view of the candidate's CV.
+        *   **Email:** Click the email address to open a **Gmail Compose** window with the subject and body pre-filled.
+
+3.  **Kanban Board**
+    *   Click **"Kanban View"** to see the board.
+    *   **Drag and Drop** candidates to change their status:
+        *   **Applied** -> **Interview Scheduled**: Opens a modal to send a Google Calendar invite.
+        *   **Any** -> **Rejected**: Prompts to send a rejection email.
+
+---
+
+## 8. Troubleshooting
+
+*   **"Webhook URL not working"**:
+    *   Check if Ngrok is still running. The URL changes every time you restart Ngrok (unless you have a paid account).
+    *   Update the URL in Google Apps Script if it changed.
+*   **"No candidates showing"**:
+    *   Check the terminal logs for "WEBHOOK RECEIVED".
+    *   If using Vercel, check the "Logs" tab in the Vercel dashboard.
+*   **"Email not sending"**:
+    *   Verify your App Password in `.env`.
+    *   Check if `SMTP_PORT` is 587.
 

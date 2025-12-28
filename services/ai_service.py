@@ -11,11 +11,15 @@ CLAUDE_API_URL = "https://api.anthropic.com/v1/messages"
 DEFAULT_PERPLEXITY_KEY = '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'
 
 
-def analyze_candidate_with_ai(resume_text, job_description, interview_answers=None, provider='perplexity', api_key=None):
+def analyze_candidate_with_ai(resume_text, job_description, interview_answers=None, provider=None, api_key=None):
     """
     Analyze a candidate's fit for a job using AI.
     Returns a dictionary with pros, cons, and analysis.
     """
+    # Determine provider from env if not specified
+    if not provider:
+        provider = os.environ.get('AI_PROVIDER', 'perplexity').lower()
+
     if not api_key:
         api_key = get_default_api_key(provider)
         
@@ -48,6 +52,8 @@ def analyze_candidate_with_ai(resume_text, job_description, interview_answers=No
     IMPORTANT: 
     1. Assume all monetary values are in Indian Rupees (INR) unless explicitly stated otherwise.
     2. If the resume is unconventional (e.g., code, raw text), infer skills and experience from context.
+    3. Analyze the "Candidate's Interview Answers" for signs of AI generation (e.g. overly perfect structure, robotic tone, lack of personal anecdotes). Be lenient, only flag if obvious.
+    4. Be CRITICAL. Do not give high scores easily. A 90+ score means a perfect match.
     
     Provide a structured analysis in JSON format with the following keys:
     - "pros": List of 3-5 specific strengths directly relevant to the job requirements.
@@ -59,7 +65,12 @@ def analyze_candidate_with_ai(resume_text, job_description, interview_answers=No
         "skills_match_score": <number 0-100 representing how well the candidate's skills match the job requirements>,
         "years_of_experience": <number or 0 if unknown>,
         "education_level": "PhD|Masters|Bachelors|Unknown",
-        "current_role": "Job Title or Unknown"
+        "current_role": "Job Title or Unknown",
+        "relevance_score": <number 0-100: How relevant is their experience to THIS specific job? Penalize for keyword stuffing without context.>,
+        "culture_fit_score": <number 0-100: Based on tone, soft skills, and values>,
+        "technical_depth_score": <number 0-100: Junior (0-40), Mid (41-70), Senior (71-100). Look for evidence of impact and complexity, not just years.>,
+        "missing_must_haves": ["List", "of", "critical", "skills", "missing"],
+        "ai_generated_probability": <number 0-100: Likelihood that the INTERVIEW ANSWERS were written by AI. 0=Human, 100=Definitely AI. Be conservative.>
     }}
     
     Return ONLY the JSON.
@@ -107,7 +118,7 @@ def _call_openai_analysis(api_key, prompt):
         "Content-Type": "application/json"
     }
     data = {
-        "model": "gpt-4o-mini",
+        "model": os.environ.get('OPENAI_MODEL', 'gpt-4o'),
         "messages": [
             {"role": "system", "content": "You are a helpful HR assistant. Output only valid JSON."},
             {"role": "user", "content": prompt}
@@ -129,7 +140,7 @@ def _call_claude_analysis(api_key, prompt):
         "content-type": "application/json"
     }
     data = {
-        "model": "claude-3-haiku-20240307",
+        "model": os.environ.get('CLAUDE_MODEL', 'claude-3-5-sonnet-20240620'),
         "max_tokens": 1000,
         "messages": [
             {"role": "user", "content": prompt + "\n\nOutput JSON only."}
@@ -250,7 +261,7 @@ def call_openai(prompt, api_key):
     }
     
     payload = {
-        "model": "gpt-4o-mini",
+        "model": os.environ.get('OPENAI_MODEL', 'gpt-4o'),
         "messages": [
             {
                 "role": "system",
@@ -281,7 +292,7 @@ def call_claude(prompt, api_key):
     }
     
     payload = {
-        "model": "claude-3-haiku-20240307",
+        "model": os.environ.get('CLAUDE_MODEL', 'claude-3-5-sonnet-20240620'),
         "max_tokens": 3000,
         "system": "You are an expert HR professional who creates insightful interview questions. Always respond with valid JSON only, no markdown code blocks or additional text.",
         "messages": [
@@ -333,10 +344,14 @@ def parse_ai_response(content):
     return questions
 
 
-def generate_interview_questions(job_description, job_title, num_questions=10, question_types='mixed', ai_provider='perplexity', custom_api_key=''):
+def generate_interview_questions(job_description, job_title, num_questions=10, question_types='mixed', ai_provider=None, custom_api_key=''):
     """Generate interview questions using the specified AI provider"""
     
     try:
+        # Determine provider from env if not specified
+        if not ai_provider:
+            ai_provider = os.environ.get('AI_PROVIDER', 'perplexity').lower()
+
         # Get API key (use custom if provided, otherwise use default)
         api_key = custom_api_key if custom_api_key else get_default_api_key(ai_provider)
         

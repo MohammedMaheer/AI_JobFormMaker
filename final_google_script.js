@@ -6,8 +6,11 @@
  * 2. Creates Google Forms for Job Applications automatically.
  * 3. Automatically sends Form responses back to your App (Candidate Scoring).
  * 
+ * NOTE: Recent advancements (AI Detection, Advanced Scoring, Rejection Emails)
+ * are handled by the Python backend. This script simply delivers the data.
+ * 
  * SETUP:
- * 1. Update the WEBHOOK_URL below to your App's URL (e.g. Ngrok or Render).
+ * 1. Update the WEBHOOK_URL below to your Vercel App's URL.
  * 2. Deploy as Web App:
  *    - Click "Deploy" > "New deployment"
  *    - Select "Web app"
@@ -17,9 +20,14 @@
  */
 
 // ================= CONFIGURATION =================
-// Replace with your Python App's URL (Ngrok or Render)
-// Ensure it ends with /api/webhook/application
-var WEBHOOK_URL = "https://patriarchical-conrad-overconservatively.ngrok-free.dev/api/webhook/application";
+// 1. FOR PRODUCTION (Vercel):
+//    Replace with your Vercel App URL: https://your-app.vercel.app/api/webhook/application
+//
+// 2. FOR LOCAL TESTING (Ngrok):
+//    Run 'python start_with_ngrok.py' and copy the Webhook URL from the terminal.
+//    Example: https://a1b2-c3d4.ngrok-free.app/api/webhook/application
+
+var WEBHOOK_URL = "https://YOUR_VERCEL_APP_URL/api/webhook/application";
 // =================================================
 
 /**
