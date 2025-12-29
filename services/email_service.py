@@ -160,15 +160,17 @@ class EmailService:
         resume_link = candidate_data.get('resume_url')
         file_url = candidate_data.get('file_url')
         
-        # Prefer local file link if base_url is provided
-        if base_url and file_url:
-            # Ensure base_url doesn't end with / and file_url starts with /
-            base = base_url.rstrip('/')
-            path = file_url.lstrip('/')
-            resume_link = f"{base}/{path}"
-        elif not resume_link and file_url:
-             # Fallback to relative path if no base_url (might not work in email)
-             resume_link = file_url
+        # Use file_url if resume_url is not set
+        if not resume_link and file_url:
+            resume_link = file_url
+        
+        # If it's already a full URL (starts with http), use it directly
+        # Otherwise, construct a local file URL with base_url
+        if resume_link and not resume_link.startswith('http'):
+            if base_url:
+                base = base_url.rstrip('/')
+                path = resume_link.lstrip('/')
+                resume_link = f"{base}/{path}"
         
         # High Score Alert Logic
         if score > 70:
