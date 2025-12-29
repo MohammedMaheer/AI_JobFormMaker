@@ -1,6 +1,8 @@
 import os
 import json
 import requests
+import threading
+import time
 
 # API URLs
 PERPLEXITY_API_URL = "https://api.perplexity.ai/chat/completions"
@@ -9,6 +11,22 @@ CLAUDE_API_URL = "https://api.anthropic.com/v1/messages"
 
 # Default API key (Perplexity)
 DEFAULT_PERPLEXITY_KEY = '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'
+
+# Rate limiting for concurrent AI requests
+_ai_lock = threading.Lock()
+_last_ai_call = 0
+_MIN_INTERVAL = 1.0  # Minimum 1 second between AI calls
+
+
+def _rate_limit():
+    """Ensure minimum interval between AI API calls to avoid rate limits"""
+    global _last_ai_call
+    with _ai_lock:
+        now = time.time()
+        elapsed = now - _last_ai_call
+        if elapsed < _MIN_INTERVAL:
+            time.sleep(_MIN_INTERVAL - elapsed)
+        _last_ai_call = time.time()
 
 
 def analyze_candidate_with_ai(resume_text, job_description, interview_answers=None, provider=None, api_key=None):
@@ -38,7 +56,7 @@ def analyze_candidate_with_ai(resume_text, job_description, interview_answers=No
             answers_text += f"Q: {q}\nA: {a}\n"
 
     prompt = f"""
-    You are an expert Senior Recruiter and Hiring Manager. Evaluate this candidate for the specific role described below.
+    You are an expert Senior Recruiter and Hiring Manager with 15+ years experience. Evaluate this candidate for the specific role described below.
     
     JOB TITLE & DESCRIPTION:
     {job_description[:3000]}
@@ -47,33 +65,50 @@ def analyze_candidate_with_ai(resume_text, job_description, interview_answers=No
     {resume_text[:3000]}
     {answers_text}
     
-    Task: Perform a deep analysis of the candidate's fit and EXTRACT structured data.
+    Task: Perform a DEEP, CRITICAL analysis of the candidate's fit and EXTRACT structured data.
     
-    IMPORTANT: 
+    IMPORTANT RULES:
     1. Assume all monetary values are in Indian Rupees (INR) unless explicitly stated otherwise.
     2. If the resume is unconventional (e.g., code, raw text), infer skills and experience from context.
-    3. Analyze the "Candidate's Interview Answers" for signs of AI generation (e.g. overly perfect structure, robotic tone, lack of personal anecdotes). Be lenient, only flag if obvious.
-    4. Be CRITICAL. Do not give high scores easily. A 90+ score means a perfect match.
+    3. Analyze the "Candidate's Interview Answers" for signs of AI generation (e.g. overly perfect structure, robotic tone, lack of personal anecdotes, generic examples). Be lenient, only flag if obvious.
+    4. Be VERY CRITICAL. Do not give high scores easily:
+       - 90-100: Perfect match, rare unicorn candidate
+       - 75-89: Strong match, minor gaps
+       - 60-74: Decent match, some concerns
+       - 40-59: Weak match, significant gaps
+       - 0-39: Poor match, not recommended
+    5. Look for RED FLAGS: job hopping (<1 year stints), gaps, inconsistencies, keyword stuffing, vague descriptions.
+    6. Evaluate IMPACT over responsibility - did they BUILD, LEAD, IMPROVE, or just PARTICIPATE?
+    7. Consider RECENCY - recent experience in relevant tech is more valuable.
     
     Provide a structured analysis in JSON format with the following keys:
-    - "pros": List of 3-5 specific strengths directly relevant to the job requirements.
-    - "cons": List of 3-5 specific gaps, weaknesses, or missing skills relative to the job.
-    - "summary": A professional executive summary of the candidate's fit (2-3 sentences).
-    - "score_adjustment": An integer between -15 and +15.
+    - "pros": List of 3-5 specific strengths directly relevant to the job requirements. Be specific with examples from their profile.
+    - "cons": List of 3-5 specific gaps, weaknesses, or concerns relative to the job. Be honest and direct.
+    - "summary": A professional executive summary of the candidate's fit (2-3 sentences). Include hiring recommendation (Strong Yes / Yes / Maybe / No / Strong No).
+    - "score_adjustment": An integer between -20 and +20. Use this to fine-tune based on intangibles.
+    - "red_flags": List of any concerning patterns (empty list if none). Examples: "4 jobs in 3 years", "No quantifiable achievements", "Skills listed but no project evidence".
     - "extracted_data": {{
         "skills": ["List", "of", "all", "technical", "skills", "found"],
-        "skills_match_score": <number 0-100 representing how well the candidate's skills match the job requirements>,
+        "skills_match_score": <number 0-100: How well do candidate's skills match job requirements? Consider depth, not just presence.>,
         "years_of_experience": <number or 0 if unknown>,
-        "education_level": "PhD|Masters|Bachelors|Unknown",
+        "education_level": "PhD|Masters|Bachelors|Diploma|HighSchool|Unknown",
         "current_role": "Job Title or Unknown",
-        "relevance_score": <number 0-100: How relevant is their experience to THIS specific job? Penalize for keyword stuffing without context.>,
-        "culture_fit_score": <number 0-100: Based on tone, soft skills, and values>,
-        "technical_depth_score": <number 0-100: Junior (0-40), Mid (41-70), Senior (71-100). Look for evidence of impact and complexity, not just years.>,
-        "missing_must_haves": ["List", "of", "critical", "skills", "missing"],
-        "ai_generated_probability": <number 0-100: Likelihood that the INTERVIEW ANSWERS were written by AI. 0=Human, 100=Definitely AI. Be conservative.>
+        "current_company": "Company Name or Unknown",
+        "relevance_score": <number 0-100: How relevant is their RECENT experience to THIS specific job? Penalize heavily for keyword stuffing without project evidence.>,
+        "culture_fit_score": <number 0-100: Based on communication style, values shown, teamwork indicators>,
+        "technical_depth_score": <number 0-100: Junior (0-40), Mid (41-70), Senior (71-85), Staff/Principal (86-100). Look for evidence of IMPACT and COMPLEXITY, not just years.>,
+        "leadership_score": <number 0-100: Evidence of mentoring, leading teams, driving initiatives. 0 if IC role.>,
+        "communication_score": <number 0-100: Quality of writing in resume/answers. Clear, concise, professional?>,
+        "project_complexity_score": <number 0-100: Did they work on complex, impactful projects or routine tasks?>,
+        "growth_trajectory": "Rising|Stable|Declining|Unknown": Career progression pattern,
+        "missing_must_haves": ["List", "of", "critical", "skills", "or", "requirements", "missing"],
+        "nice_to_haves_present": ["List", "of", "bonus", "skills", "they", "have"],
+        "ai_generated_probability": <number 0-100: Likelihood that INTERVIEW ANSWERS were AI-generated. 0=Human, 100=Definitely AI. Be conservative.>,
+        "overall_recommendation": "Strong Hire|Hire|Maybe|No Hire|Strong No",
+        "salary_expectation_fit": "Unknown|Below|Match|Above" based on their level vs typical role
     }}
     
-    Return ONLY the JSON.
+    Return ONLY the JSON. No markdown, no explanation.
     """
 
     try:
@@ -93,6 +128,9 @@ def analyze_candidate_with_ai(resume_text, job_description, interview_answers=No
         }
 
 def _call_perplexity_analysis(api_key, prompt):
+    # Rate limit to prevent API overload on concurrent submissions
+    _rate_limit()
+    
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json"
@@ -106,11 +144,36 @@ def _call_perplexity_analysis(api_key, prompt):
         "temperature": 0.2
     }
     
-    response = requests.post(PERPLEXITY_API_URL, headers=headers, json=data)
-    response.raise_for_status()
-    result = response.json()
-    content = result['choices'][0]['message']['content']
-    return _parse_json_response(content)
+    # Retry with exponential backoff for rate limits (important for serverless)
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            response = requests.post(PERPLEXITY_API_URL, headers=headers, json=data, timeout=60)
+            
+            if response.status_code == 429:  # Rate limited
+                wait_time = (2 ** attempt) + 1  # 1, 3, 5 seconds
+                print(f"Rate limited, waiting {wait_time}s before retry...")
+                time.sleep(wait_time)
+                continue
+                
+            response.raise_for_status()
+            result = response.json()
+            content = result['choices'][0]['message']['content']
+            return _parse_json_response(content)
+            
+        except requests.exceptions.Timeout:
+            print(f"API timeout on attempt {attempt + 1}")
+            if attempt < max_retries - 1:
+                time.sleep(2)
+                continue
+            raise
+        except requests.exceptions.RequestException as e:
+            if attempt < max_retries - 1 and '429' in str(e):
+                time.sleep(2 ** attempt)
+                continue
+            raise
+    
+    raise Exception("Max retries exceeded for Perplexity API")
 
 def _call_openai_analysis(api_key, prompt):
     headers = {
@@ -432,6 +495,67 @@ def generate_questions_fallback(job_description, job_title, num_questions=10, qu
         questions.append(q_copy)
     
     return questions
+
+
+def format_job_description(text, provider=None, api_key=None):
+    """
+    Format a raw job description into structured HTML using AI.
+    """
+    if not text:
+        return ""
+        
+    # Determine provider from env if not specified
+    if not provider:
+        provider = os.environ.get('AI_PROVIDER', 'perplexity').lower()
+
+    if not api_key:
+        api_key = get_default_api_key(provider)
+        
+    if not api_key:
+        return text # Return original if no AI available
+
+    prompt = f"""
+    You are a professional editor. Format the following job description into clean, structured HTML for a web display.
+    
+    Rules:
+    1. Use <h3> for section headers (e.g., "Responsibilities", "Requirements", "About Us").
+    2. Use <ul> and <li> for lists.
+    3. Use <p> for paragraphs.
+    4. Use <strong> for key terms if appropriate.
+    5. Do NOT change the actual content/words, only the structure and formatting.
+    6. Do NOT include <html>, <head>, or <body> tags. Just the content.
+    7. Return a JSON object with a single key "html" containing the HTML string.
+    
+    Job Description:
+    {text[:5000]}
+    """
+
+    try:
+        if provider == 'openai':
+            content = _call_openai_analysis(api_key, prompt)
+        elif provider == 'claude':
+            content = _call_claude_analysis(api_key, prompt)
+        else:
+            content = _call_perplexity_analysis(api_key, prompt)
+            
+        # Handle response
+        if isinstance(content, dict):
+            if 'html' in content:
+                return content['html']
+            elif 'content' in content:
+                return content['content']
+            # If we got the error dict from _parse_json_response
+            elif 'pros' in content and isinstance(content['pros'], list) and 'Could not parse' in content['pros'][0]:
+                return text
+            else:
+                # Fallback: return original text if we can't find the HTML
+                return text
+        
+        return str(content)
+            
+    except Exception as e:
+        print(f"Error formatting job description: {e}")
+        return text
 
 
 def extract_keywords(text):

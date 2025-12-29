@@ -6,15 +6,43 @@ import re
 
 class CandidateScorer:
     def __init__(self):
-        # Advanced Weighting System - Optimized for Accuracy
+        # Advanced Weighting System - Optimized for Accuracy & Robustness
         self.weights = {
-            'skills_match': 0.25,      # Reduced to prioritize relevance
-            'experience': 0.15,        # Years are less important than relevance
-            'education': 0.10,         # Degree is less critical in modern tech
-            'relevance': 0.25,         # CRITICAL: Context of experience
-            'technical_depth': 0.15,   # CRITICAL: Seniority/Mastery
-            'culture_fit': 0.05,       # Soft skills
+            'skills_match': 0.20,      # Core skills alignment
+            'experience': 0.10,        # Years matter less than quality
+            'education': 0.05,         # Degree is less critical in modern tech
+            'relevance': 0.25,         # CRITICAL: Context & recency of experience
+            'technical_depth': 0.15,   # CRITICAL: Seniority/Mastery evidence
+            'project_complexity': 0.10, # NEW: Complexity of work done
+            'communication': 0.05,     # NEW: Quality of written communication
+            'culture_fit': 0.05,       # Soft skills & values alignment
             'keywords': 0.05           # Semantic search backup
+        }
+        
+        # Severity levels for penalties
+        self.penalty_config = {
+            'missing_critical_skill': 8,    # Per missing must-have
+            'max_missing_skills_penalty': 35,
+            'low_relevance': 15,            # If relevance < 40
+            'very_low_relevance': 25,       # If relevance < 25
+            'ai_generated_answers': 12,     # If AI prob > 85%
+            'suspected_ai_answers': 5,      # If AI prob > 70%
+            'missing_linkedin': 2,
+            'red_flag_per_item': 5,         # Per red flag detected
+            'max_red_flag_penalty': 20,
+            'job_hopping': 10,              # Frequent job changes
+            'no_quantifiable_achievements': 8,
+            'keyword_stuffing': 12,         # Skills listed but no evidence
+        }
+        
+        # Bonus configurations
+        self.bonus_config = {
+            'unicorn_candidate': 8,         # High relevance + high depth
+            'strong_leadership': 5,         # Leadership score > 80
+            'excellent_communication': 3,   # Communication score > 85
+            'nice_to_have_skills': 2,       # Per nice-to-have present (max 6)
+            'rising_trajectory': 5,         # Career going up
+            'top_company_experience': 3,    # Worked at notable companies
         }
     
     def score_candidate(self, candidate_info: Dict, job_description: str, job_title: str, ai_analysis: Dict = None) -> Dict:
@@ -74,53 +102,130 @@ class CandidateScorer:
         
         # --- 4. Culture Fit ---
         culture_score = float(ai_data.get('culture_fit_score', 50))
+        
+        # --- 5. NEW: Project Complexity ---
+        project_complexity_score = float(ai_data.get('project_complexity_score', 50))
+        
+        # --- 6. NEW: Communication Quality ---
+        communication_score = float(ai_data.get('communication_score', 50))
 
-        # --- 5. Calculate Components ---
+        # --- 7. Calculate Components ---
         scores = {
             'skills_match': skills_score,
             'experience': raw_experience_score,
             'education': self._score_education(candidate_info.get('education', []), job_description),
             'relevance': relevance_score,
             'technical_depth': tech_depth_score,
+            'project_complexity': project_complexity_score,
+            'communication': communication_score,
             'culture_fit': culture_score,
             'keywords': self._score_keywords(candidate_info.get('raw_text', ''), job_description)
         }
         
-        # --- 6. Weighted Total ---
+        # --- 8. Weighted Total ---
         total_score = sum(scores[key] * self.weights.get(key, 0) for key in scores)
         
-        # --- 7. Penalties & Bonuses ---
+        # --- 9. PENALTIES (Intelligent & Contextual) ---
+        penalties_applied = []
         
         # Penalty: Missing Must-Haves (Stricter)
         missing_critical = ai_data.get('missing_must_haves', [])
         if missing_critical:
-            # Penalize 8 points per missing critical skill, max 30 points
-            penalty = min(len(missing_critical) * 8, 30)
+            penalty = min(len(missing_critical) * self.penalty_config['missing_critical_skill'], 
+                         self.penalty_config['max_missing_skills_penalty'])
             total_score -= penalty
+            penalties_applied.append(f"-{penalty} pts: Missing critical skills ({', '.join(missing_critical[:3])})")
             print(f"Applied penalty of {penalty} for missing: {missing_critical}")
             
-        # Penalty: Low Relevance (Context Mismatch)
-        if relevance_score < 40:
-            penalty = 15
+        # Penalty: Low Relevance (Tiered)
+        if relevance_score < 25:
+            penalty = self.penalty_config['very_low_relevance']
             total_score -= penalty
+            penalties_applied.append(f"-{penalty} pts: Very low relevance to job")
+            print(f"Applied penalty of {penalty} for very low relevance ({relevance_score})")
+        elif relevance_score < 40:
+            penalty = self.penalty_config['low_relevance']
+            total_score -= penalty
+            penalties_applied.append(f"-{penalty} pts: Low relevance to job")
             print(f"Applied penalty of {penalty} for low relevance ({relevance_score})")
 
-        # Penalty: AI Generated Answers
+        # Penalty: AI Generated Answers (Tiered)
         ai_prob = float(ai_data.get('ai_generated_probability', 0))
-        if ai_prob > 85: # Only penalize if very high probability (conservative)
-            penalty = 10
+        if ai_prob > 85:
+            penalty = self.penalty_config['ai_generated_answers']
             total_score -= penalty
+            penalties_applied.append(f"-{penalty} pts: Likely AI-generated answers ({int(ai_prob)}%)")
+            print(f"Applied penalty of {penalty} for AI answers (Prob: {ai_prob}%)")
+        elif ai_prob > 70:
+            penalty = self.penalty_config['suspected_ai_answers']
+            total_score -= penalty
+            penalties_applied.append(f"-{penalty} pts: Suspected AI-generated answers")
             print(f"Applied penalty of {penalty} for suspected AI answers (Prob: {ai_prob}%)")
         
-        # Bonus: High Relevance + High Depth (Unicorn Candidate)
-        if relevance_score > 90 and tech_depth_score > 90:
-            total_score += 5
+        # Penalty: Missing LinkedIn Profile
+        linkedin_url = candidate_info.get('linkedin_url', '')
+        if not linkedin_url or not linkedin_url.strip():
+            penalty = self.penalty_config['missing_linkedin']
+            total_score -= penalty
+            penalties_applied.append(f"-{penalty} pts: No LinkedIn profile")
+            print(f"Applied penalty of {penalty} for missing LinkedIn profile")
+        
+        # Penalty: Red Flags (NEW)
+        red_flags = ai_analysis.get('red_flags', []) if ai_analysis else []
+        if red_flags:
+            penalty = min(len(red_flags) * self.penalty_config['red_flag_per_item'],
+                         self.penalty_config['max_red_flag_penalty'])
+            total_score -= penalty
+            penalties_applied.append(f"-{penalty} pts: Red flags detected")
+            print(f"Applied penalty of {penalty} for red flags: {red_flags}")
+        
+        # --- 10. BONUSES (Reward Excellence) ---
+        bonuses_applied = []
+        
+        # Bonus: Unicorn Candidate (High Relevance + High Depth)
+        if relevance_score > 85 and tech_depth_score > 85:
+            bonus = self.bonus_config['unicorn_candidate']
+            total_score += bonus
+            bonuses_applied.append(f"+{bonus} pts: Exceptional relevance & depth")
             
-        # Apply generic AI adjustment
+        # Bonus: Strong Leadership
+        leadership_score = float(ai_data.get('leadership_score', 0))
+        if leadership_score > 80:
+            bonus = self.bonus_config['strong_leadership']
+            total_score += bonus
+            bonuses_applied.append(f"+{bonus} pts: Strong leadership evidence")
+            
+        # Bonus: Excellent Communication
+        if communication_score > 85:
+            bonus = self.bonus_config['excellent_communication']
+            total_score += bonus
+            bonuses_applied.append(f"+{bonus} pts: Excellent communication")
+            
+        # Bonus: Nice-to-Have Skills
+        nice_to_haves = ai_data.get('nice_to_haves_present', [])
+        if nice_to_haves:
+            bonus = min(len(nice_to_haves) * self.bonus_config['nice_to_have_skills'], 6)
+            total_score += bonus
+            bonuses_applied.append(f"+{bonus} pts: Bonus skills ({len(nice_to_haves)})")
+            
+        # Bonus: Rising Career Trajectory
+        growth = ai_data.get('growth_trajectory', 'Unknown')
+        if growth == 'Rising':
+            bonus = self.bonus_config['rising_trajectory']
+            total_score += bonus
+            bonuses_applied.append(f"+{bonus} pts: Rising career trajectory")
+            
+        # Apply generic AI adjustment (expanded range)
+        ai_adjustment = 0
         if ai_analysis and 'score_adjustment' in ai_analysis:
             try:
                 ai_adjustment = float(ai_analysis['score_adjustment'])
+                ai_adjustment = max(-20, min(20, ai_adjustment))  # Clamp to -20 to +20
                 total_score += ai_adjustment
+                if ai_adjustment > 0:
+                    bonuses_applied.append(f"+{ai_adjustment} pts: AI assessment boost")
+                elif ai_adjustment < 0:
+                    penalties_applied.append(f"{ai_adjustment} pts: AI assessment adjustment")
             except:
                 pass
         
@@ -132,10 +237,21 @@ class CandidateScorer:
             feedback = ["⚠ Resume parsing failed - Manual review required"]
         else:
             feedback = self._generate_feedback(scores, candidate_info)
+            # Add critical warnings at the top
+            if red_flags:
+                feedback.insert(0, f"🚩 Red Flags: {', '.join(red_flags[:3])}")
             if missing_critical:
                 feedback.insert(0, f"⚠ Missing Critical Skills: {', '.join(missing_critical[:3])}")
-            if ai_prob > 75:
-                feedback.append(f"⚠ High likelihood of AI-generated answers ({int(ai_prob)}%)")
+            if ai_prob > 70:
+                feedback.append(f"⚠ Possible AI-generated answers ({int(ai_prob)}%)")
+            # Add bonuses/penalties summary
+            if bonuses_applied:
+                feedback.append(f"✅ Bonuses: {'; '.join(bonuses_applied[:3])}")
+            if penalties_applied:
+                feedback.append(f"❌ Penalties: {'; '.join(penalties_applied[:3])}")
+        
+        # Get AI recommendation
+        ai_recommendation = ai_data.get('overall_recommendation', self._get_grade(total_score))
         
         result = {
             'total_score': round(total_score, 2),
@@ -145,6 +261,7 @@ class CandidateScorer:
             'candidate_name': candidate_info.get('name') or candidate_info.get('candidate_name') or 'Unknown',
             'candidate_email': candidate_info.get('email') or candidate_info.get('candidate_email') or 'N/A',
             'candidate_phone': candidate_info.get('phone') or candidate_info.get('candidate_phone') or 'N/A',
+            'linkedin_url': candidate_info.get('linkedin_url', ''),
             'file_url': candidate_info.get('file_url', ''),
             'parsing_failed': candidate_info.get('parsing_failed', False),
             'status': candidate_info.get('status', 'applied'), # Default to 'applied' for Kanban
@@ -161,7 +278,11 @@ class CandidateScorer:
                 'pros': ai_analysis.get('pros', []),
                 'cons': ai_analysis.get('cons', []),
                 'summary': ai_analysis.get('summary', ''),
-                'adjustment': ai_adjustment if 'ai_adjustment' in locals() else 0
+                'adjustment': ai_adjustment,
+                'red_flags': red_flags,
+                'recommendation': ai_recommendation,
+                'penalties': penalties_applied,
+                'bonuses': bonuses_applied
             }
             
         return result

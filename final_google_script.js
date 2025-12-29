@@ -24,7 +24,7 @@
 //    Replace with your Vercel App URL: https://your-app.vercel.app/api/webhook/application
 //
 // 2. FOR LOCAL TESTING (Ngrok):
-//    Run 'python start_with_ngrok.py' and copy the Webhook URL from the terminal.
+//    Run 'python app.py --ngrok' and copy the Webhook URL from the terminal.
 //    Example: https://a1b2-c3d4.ngrok-free.app/api/webhook/application
 
 var WEBHOOK_URL = "https://YOUR_VERCEL_APP_URL/api/webhook/application";
@@ -64,6 +64,10 @@ function doPost(e) {
     // Check action type
     if (data.action === 'create_application_form') {
       return createForm(data);
+    } else if (data.action === 'close_form') {
+      return closeForm(data);
+    } else if (data.action === 'delete_form') {
+      return deleteForm(data);
     } else {
       return saveToSheet(data);
     }
@@ -75,17 +79,67 @@ function doPost(e) {
   }
 }
 
+function closeForm(data) {
+  try {
+    var formUrl = data.form_url;
+    if (!formUrl) {
+      throw new Error("Form URL is required to close the form.");
+    }
+    
+    var form = FormApp.openByUrl(formUrl);
+    form.setAcceptingResponses(false);
+    
+    return ContentService.createTextOutput(JSON.stringify({
+      "status": "success",
+      "message": "Form is now closed and not accepting responses."
+    })).setMimeType(ContentService.MimeType.JSON);
+    
+  } catch (e) {
+    return ContentService.createTextOutput(JSON.stringify({
+      "status": "error",
+      "message": "Failed to close form: " + e.toString()
+    })).setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+function deleteForm(data) {
+  try {
+    var formUrl = data.form_url;
+    if (!formUrl) {
+      throw new Error("Form URL is required to delete the form.");
+    }
+    
+    var form = FormApp.openByUrl(formUrl);
+    var formId = form.getId();
+    
+    // Use DriveApp to trash the file
+    DriveApp.getFileById(formId).setTrashed(true);
+    
+    return ContentService.createTextOutput(JSON.stringify({
+      "status": "success",
+      "message": "Form has been moved to trash."
+    })).setMimeType(ContentService.MimeType.JSON);
+    
+  } catch (e) {
+    return ContentService.createTextOutput(JSON.stringify({
+      "status": "error",
+      "message": "Failed to delete form: " + e.toString()
+    })).setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
 function createForm(data) {
   try {
     // 1. Create the Form
     var form = FormApp.create(data.form_title);
     form.setDescription('Job Application for ' + data.job_title + (data.company_name ? ' at ' + data.company_name : ''));
     
-    // REQUIRED for File Uploads: Collect email addresses
+    // REQUIRED for File Uploads: Collect email addresses AND set destination folder
     try {
       form.setCollectEmail(true);
+      form.setRequireLogin(false); // Allow anyone to submit (with email collection)
     } catch (e) {
-      Logger.log("Could not set collect email: " + e);
+      Logger.log("Could not set form settings: " + e);
     }
     
     // 2. Add Standard Fields
@@ -95,51 +149,68 @@ function createForm(data) {
         try {
           if (field.type === 'file') {
             // File Upload requires the form to collect emails
-            try { form.setCollectEmail(true); } catch(e) {}
             item = form.addFileUploadItem();
+            item.setTitle(field.field);
+            if (field.required) item.setRequired(true);
+            Logger.log("Successfully added file upload field: " + field.field);
           } else if (field.type === 'text') {
             item = form.addTextItem();
+            item.setTitle(field.field);
+            if (field.required) item.setRequired(true);
           } else if (field.type === 'email') {
             item = form.addTextItem();
-            // Add Email Validation
             var emailValidation = FormApp.createTextValidation()
               .requireTextIsEmail()
               .build();
             item.setValidation(emailValidation);
+            item.setTitle(field.field);
+            if (field.required) item.setRequired(true);
           } else if (field.type === 'url') {
             item = form.addTextItem();
-            // Add URL Validation
             var urlValidation = FormApp.createTextValidation()
               .requireTextIsUrl()
               .build();
             item.setValidation(urlValidation);
+            item.setTitle(field.field);
+            if (field.required) item.setRequired(true);
           } else if (field.type === 'phone') {
             item = form.addTextItem();
-            // Add Phone Validation (Regex for digits)
             var phoneValidation = FormApp.createTextValidation()
               .requireTextMatchesPattern("[0-9()+\\- ]+")
               .setHelpText("Please enter a valid phone number.")
               .build();
             item.setValidation(phoneValidation);
+            item.setTitle(field.field);
+            if (field.required) item.setRequired(true);
           } else if (field.type === 'number') {
             item = form.addTextItem(); 
             var numberValidation = FormApp.createTextValidation()
               .requireNumber()
               .build();
             item.setValidation(numberValidation);
+            item.setTitle(field.field);
+            if (field.required) item.setRequired(true);
+          } else if (field.type === 'date') {
+            item = form.addDateItem();
+            item.setTitle(field.field);
+            if (field.required) item.setRequired(true);
           } else {
             item = form.addTextItem();
+            item.setTitle(field.field);
+            if (field.required) item.setRequired(true);
           }
-          
-          item.setTitle(field.field);
-          if (field.required) item.setRequired(true);
         } catch (err) {
           Logger.log("Error adding field " + field.field + ": " + err);
           // Fallback: If File Upload fails (common restriction), use Text Item for URL
           if (field.type === 'file') {
+            Logger.log("File upload failed, using URL fallback for: " + field.field);
             item = form.addTextItem();
-            item.setTitle(field.field + " (Upload Unavailable - Paste Link)");
-            item.setHelpText("We could not create a file upload field (likely due to Google permissions). Please paste a link to your Resume/CV (Google Drive, Dropbox, etc.)");
+            item.setTitle(field.field + " (Paste Google Drive/Dropbox Link)");
+            item.setHelpText("File upload is restricted. Please upload your resume to Google Drive or Dropbox and paste the shareable link here.");
+            var urlValidation = FormApp.createTextValidation()
+              .requireTextIsUrl()
+              .build();
+            item.setValidation(urlValidation);
             if (field.required) item.setRequired(true);
           }
         }
@@ -236,6 +307,7 @@ function onFormSubmit(e) {
       "email": email || "",
       "phone": "",
       "resume_url": "",
+      "linkedin_url": "",
       "job_description": jobDescription,
       "answers": {}
     };
@@ -245,7 +317,8 @@ function onFormSubmit(e) {
     var bestMatches = {
       name: { score: 0, value: "" },
       phone: { score: 0, value: "" },
-      resume: { score: 0, value: "" }
+      resume: { score: 0, value: "" },
+      linkedin: { score: 0, value: "" }
     };
 
     // Loop through responses
@@ -303,6 +376,17 @@ function onFormSubmit(e) {
       if (titleLower.includes("upload")) resumeScore += 5;
       if (titleLower.includes("attach")) resumeScore += 5;
       
+      // --- 5. Detect LinkedIn ---
+      var linkedinScore = 0;
+      if (titleLower.includes("linkedin")) linkedinScore += 10;
+      if (titleLower.includes("linked in")) linkedinScore += 10;
+      if (titleLower.includes("profile url")) linkedinScore += 5;
+      if (titleLower.includes("profile link")) linkedinScore += 5;
+      
+      if (linkedinScore > bestMatches.linkedin.score && answer) {
+        bestMatches.linkedin = { score: linkedinScore, value: answer };
+      }
+      
       if (resumeScore > bestMatches.resume.score) {
         // Handle File Upload vs Text URL
         var resumeValue = "";
@@ -329,6 +413,7 @@ function onFormSubmit(e) {
     if (bestMatches.name.score > 0) payload.name = bestMatches.name.value;
     if (bestMatches.phone.score > 0) payload.phone = bestMatches.phone.value;
     if (bestMatches.resume.score > 0) payload.resume_url = bestMatches.resume.value;
+    if (bestMatches.linkedin.score > 0) payload.linkedin_url = bestMatches.linkedin.value;
 
     // Send to Python Backend
     var options = {

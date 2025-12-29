@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 import requests
 import gdown
 from services.file_processor import extract_text_from_file
-from services.ai_service import generate_interview_questions, analyze_candidate_with_ai
+from services.ai_service import generate_interview_questions, analyze_candidate_with_ai, format_job_description
 from services.resume_parser import ResumeParser
 from services.candidate_scorer import CandidateScorer
 from services.storage_service import StorageService
@@ -39,15 +39,65 @@ else:
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 
+ALLOWED_EXTENSIONS = {'pdf', 'doc', 'docx', 'txt'}
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
+# ============================================================
+# HEALTH CHECK & DIAGNOSTICS
+# ============================================================
+@app.route('/api/health')
+def health_check():
+    """Health check endpoint for monitoring and deployment verification"""
+    is_vercel = bool(os.environ.get('VERCEL'))
+    is_postgres = storage_service.is_postgres
+    
+    return jsonify({
+        'status': 'healthy',
+        'environment': 'vercel' if is_vercel else 'local',
+        'database': 'postgresql' if is_postgres else 'sqlite',
+        'timestamp': datetime.now().isoformat()
+    })
+
+
+@app.route('/api/debug/config')
+def debug_config():
+    """Debug endpoint to check configuration (development only)"""
+    if os.environ.get('VERCEL'):
+        return jsonify({'error': 'Debug endpoint disabled in production'}), 403
+    
+    return jsonify({
+        'environment': {
+            'VERCEL': bool(os.environ.get('VERCEL')),
+            'DATABASE_URL': '***' if os.environ.get('DATABASE_URL') else None,
+            'GOOGLE_SCRIPT_URL': bool(os.environ.get('GOOGLE_SCRIPT_URL')),
+            'NGROK_AUTH_TOKEN': bool(os.environ.get('NGROK_AUTH_TOKEN')),
+            'AI_PROVIDER': os.environ.get('AI_PROVIDER', 'perplexity'),
+        },
+        'storage': {
+            'is_postgres': storage_service.is_postgres,
+            'jobs_count': len(storage_service.get_all_jobs()),
+            'candidates_count': len(storage_service.get_all_candidates()),
+        }
+    })
+
+
+# ============================================================
+# PAGE ROUTES
+# ============================================================
 @app.route('/')
-def index():
+def dashboard():
+    return render_template('dashboard.html')
+
+@app.route('/create-job')
+def create_job_page():
     return render_template('index.html')
 
+@app.route('/jobs/<job_id>')
+def job_details(job_id):
+    return render_template('job_details.html', job_id=job_id)
 
 @app.route('/ranking')
 def ranking():
@@ -57,6 +107,94 @@ def ranking():
 @app.route('/uploads/<filename>')
 def uploaded_file(filename):
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
+
+
+@app.route('/api/jobs', methods=['GET'])
+def get_jobs():
+    jobs = storage_service.get_all_jobs()
+    return jsonify({'jobs': jobs})
+
+@app.route('/api/jobs/<job_id>', methods=['GET'])
+def get_job(job_id):
+    job = storage_service.get_job(job_id)
+    if not job:
+        return jsonify({'error': 'Job not found'}), 404
+    return jsonify({'job': job})
+
+@app.route('/api/jobs/<job_id>/candidates', methods=['GET'])
+def get_job_candidates(job_id):
+    candidates = storage_service.get_all_candidates(job_id=job_id)
+    return jsonify({'candidates': candidates})
+
+@app.route('/api/jobs/<job_id>/close', methods=['POST'])
+def close_job(job_id):
+    """Mark a job as closed (inactive) and stop Google Form responses"""
+    print(f"Attempting to close job: {job_id}")
+    try:
+        # 1. Get job details to find script_url and edit_url
+        job = storage_service.get_job(job_id)
+        if not job:
+            return jsonify({'success': False, 'error': 'Job not found'}), 404
+
+        # 2. Try to close the Google Form if we have the URL
+        script_url = job.get('script_url')
+        edit_url = job.get('edit_url')
+        
+        if script_url and edit_url:
+            print(f"Closing Google Form via Script: {script_url}")
+            try:
+                payload = {
+                    'action': 'close_form',
+                    'form_url': edit_url
+                }
+                resp = requests.post(script_url, json=payload, timeout=10)
+                print(f"Google Script Response: {resp.text}")
+            except Exception as e:
+                print(f"Warning: Failed to close Google Form remotely: {e}")
+                # We continue to close it locally anyway
+
+        # 3. Update local status
+        success = storage_service.update_job_status(job_id, 'closed')
+        if success:
+            print(f"Successfully closed job: {job_id}")
+            return jsonify({'success': True})
+        else:
+            print(f"Failed to close job: {job_id} (DB error)")
+            return jsonify({'success': False, 'error': 'Failed to update job status'}), 500
+            
+    except Exception as e:
+        print(f"Exception closing job {job_id}: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/jobs/<job_id>', methods=['DELETE'])
+def delete_job(job_id):
+    """Delete a job and its candidates"""
+    try:
+        # 1. Get job details to find script_url and edit_url
+        job = storage_service.get_job(job_id)
+        if job:
+            script_url = job.get('script_url')
+            edit_url = job.get('edit_url')
+            
+            if script_url and edit_url:
+                print(f"Deleting Google Form via Script: {script_url}")
+                try:
+                    payload = {
+                        'action': 'delete_form',
+                        'form_url': edit_url
+                    }
+                    requests.post(script_url, json=payload, timeout=10)
+                except Exception as e:
+                    print(f"Warning: Failed to delete Google Form remotely: {e}")
+
+        success = storage_service.delete_job(job_id)
+        if success:
+            return jsonify({'success': True})
+        else:
+            return jsonify({'success': False, 'error': 'Failed to delete job'}), 500
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 @app.route('/api/rank', methods=['POST'])
@@ -327,6 +465,44 @@ def send_to_zapier():
                 pass
 
             if form_type == 'application_form':
+                # Create Job in Database
+                job_data = None
+                try:
+                    # Format description with AI
+                    raw_description = data.get('job_description', '')
+                    formatted_description = format_job_description(raw_description)
+                    
+                    job_data = {
+                        'title': job_title,
+                        'description': formatted_description,
+                        'form_url': form_url,
+                        'edit_url': resp_json.get('editUrl') if resp_json else None,
+                        'script_url': webhook_url, # Save the script URL to control the form later
+                        'status': 'active',
+                        'questions': questions,
+                        'company_name': company_name
+                    }
+                    storage_service.create_job(job_data)
+                    print(f"Job created: {job_title}")
+                except Exception as e:
+                    print(f"Error creating job record: {e}")
+                    # Fallback if AI fails or other error
+                    if not job_data:
+                         job_data = {
+                            'title': job_title,
+                            'description': data.get('job_description', ''),
+                            'form_url': form_url,
+                            'edit_url': resp_json.get('editUrl') if resp_json else None,
+                            'script_url': webhook_url,
+                            'status': 'active',
+                            'questions': questions,
+                            'company_name': company_name
+                        }
+                         try:
+                             storage_service.create_job(job_data)
+                         except:
+                             pass
+
                 message = 'Job application form created successfully!'
                 if form_url:
                     message += f'<br><br><a href="{form_url}" target="_blank" class="btn btn-primary">View Created Form</a>'
@@ -336,7 +512,8 @@ def send_to_zapier():
                 return jsonify({
                     'success': True,
                     'message': message,
-                    'formUrl': form_url
+                    'formUrl': form_url,
+                    'jobId': job_data.get('id') if job_data else None
                 })
             else:
                 return jsonify({
@@ -421,11 +598,6 @@ def export_txt():
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
-
-
-@app.route('/health')
-def health_check():
-    return jsonify({'status': 'healthy'})
 
 
 @app.route('/api/upload-resume', methods=['POST'])
@@ -545,13 +717,61 @@ def webhook_application():
         data = request.get_json()
         print(f"Received webhook data: {data.keys()}")
         
-        # Check for duplicates (debounce)
+        # Try to link to a Job FIRST (needed for duplicate check)
+        job_id = None
+        job_desc_from_form = data.get('job_description', '') or ''
+        
+        # Search active jobs to find a match
+        try:
+            active_jobs = storage_service.get_all_jobs()
+            print(f"Job matching: Found {len(active_jobs)} jobs, form description: '{job_desc_from_form[:50]}...'")
+            
+            # Strategy 1: Match by job title in form description
+            for job in active_jobs:
+                # Only match ACTIVE jobs
+                if job.get('status') != 'active':
+                    continue
+                    
+                # Check if job title is in the form description (e.g. "Job Application for Software Engineer")
+                if job.get('title') and job.get('title') in job_desc_from_form:
+                    job_id = job['id']
+                    print(f"✓ Matched by title: {job_id} ({job['title']})")
+                    
+                    # Use the FULL JD from the database for better scoring
+                    if job.get('description'):
+                        print("Using full JD from database for scoring.")
+                        data['job_description'] = job['description']
+                    break
+            
+            # Strategy 2: If only one active job and no match found, assign to it
+            if not job_id:
+                active_only = [j for j in active_jobs if j.get('status') == 'active']
+                if len(active_only) == 1:
+                    job = active_only[0]
+                    job_id = job['id']
+                    print(f"✓ Auto-assigned to only active job: {job_id} ({job['title']})")
+                    if job.get('description'):
+                        data['job_description'] = job['description']
+                elif len(active_only) == 0:
+                    print("⚠️ No active jobs found!")
+                else:
+                    print(f"⚠️ Multiple active jobs ({len(active_only)}), couldn't auto-match")
+                    
+        except Exception as e:
+            print(f"Error matching job: {e}")
+
+        if job_id:
+            data['job_id'] = job_id
+        else:
+            print("⚠️ WARNING: No job_id assigned to this application!")
+        
+        # Check for duplicates (debounce) - now includes job_id
         email = data.get('email')
         if email:
-            # Check if we processed this email in the last 2 minutes
-            existing = storage_service.get_recent_candidate_by_email(email, minutes=2)
+            # Check if we processed this email FOR THIS JOB in the last 2 minutes
+            existing = storage_service.get_recent_candidate_by_email(email, job_id=job_id, minutes=2)
             if existing:
-                print(f"⚠️ DUPLICATE DETECTED: Ignoring webhook for {email} (processed recently)")
+                print(f"⚠️ DUPLICATE DETECTED: Ignoring webhook for {email} on job {job_id} (processed recently)")
                 return jsonify({"status": "success", "message": "Duplicate application ignored."}), 200
 
         # 1. Save Pending Application IMMEDIATELY (Critical for Vercel)
@@ -584,16 +804,20 @@ def save_pending_application(data):
         email = data.get('email', '')
         phone = data.get('phone', '')
         resume_url = data.get('resume_url')
+        linkedin_url = data.get('linkedin_url', '')
         job_description = data.get('job_description', '')
         answers = data.get('answers', {})
+        job_id = data.get('job_id')
         
         # Create a basic candidate object
         candidate_data = {
             'id': f"cand_{int(datetime.now().timestamp())}_{uuid.uuid4().hex[:8]}",
+            'job_id': job_id,
             'name': name,
             'email': email,
             'phone': phone,
             'resume_url': resume_url,
+            'linkedin_url': linkedin_url,
             'job_description': job_description,
             'answers': answers,
             'timestamp': datetime.now().isoformat(),
@@ -611,14 +835,22 @@ def save_pending_application(data):
         print(f"Error saving pending application: {e}")
         return None
 
-def process_application_background(data, candidate_id=None, base_url=None):
-    """Process the application in the background to avoid timeouts"""
+def process_application_background(data, candidate_id=None, base_url=None, skip_emails=False):
+    """Process the application in the background to avoid timeouts
+    
+    Args:
+        data: Application data dict
+        candidate_id: Optional ID if updating existing candidate
+        base_url: Base URL for links in emails
+        skip_emails: If True, skip sending emails (used for reprocessing)
+    """
     with app.app_context():
         try:
             name = data.get('name', 'Unknown Candidate')
             email = data.get('email', '')
             phone = data.get('phone', '')
             resume_url = data.get('resume_url')
+            linkedin_url = data.get('linkedin_url', '')
             job_description = data.get('job_description', '')
             answers = data.get('answers', {})
             
@@ -628,11 +860,15 @@ def process_application_background(data, candidate_id=None, base_url=None):
                 "name": name,
                 "email": email,
                 "phone": phone,
+                "linkedin_url": linkedin_url,
                 "raw_text": ""
             }
             
             if candidate_id:
                 candidate_info['id'] = candidate_id
+            
+            if data.get('job_id'):
+                candidate_info['job_id'] = data.get('job_id')
 
             
             if resume_url:
@@ -760,7 +996,7 @@ def process_application_background(data, candidate_id=None, base_url=None):
                                 parsed_info = resume_parser.parse_resume(file_path, filename)
                                 
                                 # Merge parsed info but PREFER form data for critical fields
-                                # This prevents "Robotics AI" (from resume text) overwriting "Mohammed Maheer" (from form)
+                                # This prevents "Robotics AI" (from resume text) overwriting "Candidate Name" (from form)
                                 candidate_info.update(parsed_info)
                                 
                                 # FORCE override with form data if available
@@ -830,29 +1066,36 @@ def process_application_background(data, candidate_id=None, base_url=None):
             print(f"Score result: {score_result['total_score']} (Skills: {score_result['breakdown']['skills_match']})")
             
             # 4. Save
-            # Ensure we preserve the ID if it was passed
+            # Ensure we preserve the ID and job_id if they were passed
             if candidate_id:
                 score_result['id'] = candidate_id
+            
+            # Preserve job_id from the original data
+            if data.get('job_id'):
+                score_result['job_id'] = data.get('job_id')
+            
+            # Mark as processed (not pending anymore) - prevents duplicate processing
+            # Note: Kanban frontend maps 'processed' to 'applied' column for display
+            score_result['status'] = 'processed'
                 
             storage_service.save_candidate(score_result)
-            print("Candidate saved successfully!")
+            print("Candidate saved successfully with status: processed")
             
-            # 5. Send Emails
-            # Check if emails were already sent for this ID (to prevent double sending on retries)
-            # We can check if the candidate status was already 'processed' before we started, 
-            # but since we are overwriting, let's just be safe and send.
-            # The duplicate check at the webhook level should prevent this, but as a failsafe:
-            print("Sending notifications...")
-            
-            # Send Candidate Confirmation
-            cand_email = score_result.get('candidate_email') or score_result.get('email')
-            cand_name = score_result.get('candidate_name') or score_result.get('name')
-            
-            if cand_email:
-                email_service.send_candidate_confirmation(cand_email, cand_name)
-            
-            # Send Admin Notification
-            email_service.send_admin_notification(score_result, base_url)
+            # 5. Send Emails (only if not skipped)
+            if skip_emails:
+                print("Skipping emails (reprocessing mode)")
+            else:
+                print("Sending notifications...")
+                
+                # Send Candidate Confirmation
+                cand_email = score_result.get('candidate_email') or score_result.get('email')
+                cand_name = score_result.get('candidate_name') or score_result.get('name')
+                
+                if cand_email:
+                    email_service.send_candidate_confirmation(cand_email, cand_name)
+                
+                # Send Admin Notification
+                email_service.send_admin_notification(score_result, base_url)
             
         except Exception as e:
             print(f"Error in background processing: {e}")
@@ -863,6 +1106,19 @@ def get_candidates():
     """Get all stored candidates"""
     candidates = storage_service.get_all_candidates()
     return jsonify({'candidates': candidates})
+
+
+@app.route('/api/candidates/fix-orphans', methods=['POST'])
+def fix_orphan_candidates():
+    """Fix candidates with no job_id by assigning them to a job"""
+    data = request.json or {}
+    target_job_id = data.get('job_id')  # Optional: specify which job to assign to
+    
+    result = storage_service.fix_orphan_candidates(target_job_id)
+    
+    if 'error' in result:
+        return jsonify({'success': False, **result}), 400
+    return jsonify({'success': True, **result})
 
 
 @app.route('/api/candidates', methods=['DELETE'])
@@ -941,8 +1197,21 @@ def process_candidate_manual(candidate_id):
         
         if not candidate:
             return jsonify({'success': False, 'error': 'Candidate not found'}), 404
+        
+        # 2. Check if already processed (prevent double processing)
+        current_status = candidate.get('status', '')
+        if current_status == 'processed' or current_status == 'applied' or current_status == 'interview_scheduled' or current_status == 'rejected':
+            print(f"Candidate {candidate_id} already processed (status: {current_status}), skipping.")
+            return jsonify({'success': True, 'message': 'Candidate already processed', 'skipped': True})
+        
+        # Also check if we have a valid score already
+        if candidate.get('total_score', 0) > 0 and candidate.get('ai_analysis') and not candidate.get('ai_analysis', {}).get('summary', '').startswith('Processing Pending'):
+            print(f"Candidate {candidate_id} has valid score ({candidate.get('total_score')}), skipping reprocess.")
+            # Update status to applied if it was stuck on pending
+            storage_service.update_status(candidate_id, 'applied')
+            return jsonify({'success': True, 'message': 'Candidate already has score', 'skipped': True})
             
-        # 2. Re-construct data object from stored raw_data or fields
+        # 3. Re-construct data object from stored raw_data or fields
         data = candidate.get('raw_data') or {
             'name': candidate.get('name'),
             'email': candidate.get('email'),
@@ -952,8 +1221,9 @@ def process_candidate_manual(candidate_id):
             'answers': candidate.get('answers')
         }
         
-        # 3. Run processing synchronously (since user clicked the button)
-        process_application_background(data, candidate_id)
+        # 4. Run processing synchronously (since user clicked the button)
+        # Pass skip_emails=True since emails were already sent on first process
+        process_application_background(data, candidate_id, skip_emails=True)
         
         return jsonify({'success': True, 'message': 'Candidate processed successfully'})
     except Exception as e:
@@ -961,5 +1231,56 @@ def process_candidate_manual(candidate_id):
 
 
 if __name__ == '__main__':
+    import sys
     port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=True)
+    
+    # Always run with Ngrok for local development unless --no-ngrok is passed
+    # User requested: "it should always start with ngrok in local deployment"
+    if '--no-ngrok' not in sys.argv:
+        try:
+            from pyngrok import ngrok
+            
+            # Check for auth token in env
+            auth_token = os.environ.get("NGROK_AUTH_TOKEN")
+            if auth_token:
+                ngrok.set_auth_token(auth_token)
+            
+            try:
+                # Connect to the port
+                public_url = ngrok.connect(port).public_url
+                
+                print("\n" + "="*60)
+                print(f" 🚀 NGROK TUNNEL ESTABLISHED")
+                print(f" Public URL: {public_url}")
+                print(f" Webhook URL: {public_url}/api/webhook/application")
+                print("="*60)
+                print(" INSTRUCTIONS:")
+                print(" 1. Copy the Webhook URL above.")
+                print(" 2. Go to your Google Apps Script Editor.")
+                print(" 3. Update the WEBHOOK_URL variable.")
+                print(" 4. Save and Deploy as Web App again.")
+                print("="*60 + "\n")
+                
+            except Exception as e:
+                if "ERR_NGROK_4018" in str(e) or "authentication failed" in str(e):
+                    print("\n" + "!"*60)
+                    print(" NGROK AUTHENTICATION REQUIRED")
+                    print("!"*60)
+                    print(" Ngrok now requires a free account.")
+                    print(" 1. Go to: https://dashboard.ngrok.com/signup")
+                    print(" 2. Copy your Authtoken.")
+                    print(" 3. Add NGROK_AUTH_TOKEN to your .env file")
+                    print("-" * 60)
+                else:
+                    print(f"Error starting ngrok: {e}")
+        
+        except ImportError:
+            print("pyngrok not installed. Please run: pip install pyngrok")
+            
+        # Run without debug mode when using ngrok to avoid double-reloader issues
+        app.run(host='0.0.0.0', port=port, debug=False)
+        
+    else:
+        # Standard Local Run (only if --no-ngrok is passed)
+        print(f"Starting Flask server on port {port} (Ngrok disabled)...")
+        app.run(host='0.0.0.0', port=port, debug=True)

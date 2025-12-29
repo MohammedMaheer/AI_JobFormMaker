@@ -358,6 +358,7 @@ document.getElementById('create-application-form-btn').addEventListener('click',
             body: JSON.stringify({
                 questions: currentQuestions,
                 job_title: currentJobTitle,
+                job_description: currentJobDescription,
                 webhook_url: webhookUrl,
                 form_type: 'application_form',
                 company_name: companyName
@@ -373,11 +374,21 @@ document.getElementById('create-application-form-btn').addEventListener('click',
         // Show success with form link if available
         let successMsg = 'Job application form created successfully!';
         if (data.formUrl) {
-            successMsg += `<br><br><a href="${data.formUrl}" target="_blank" class="btn btn-success btn-lg" style="margin-top: 20px;">
-                <i class="fab fa-wpforms"></i> Open Google Form
-            </a>`;
+            successMsg += `<div style="display: flex; gap: 10px; justify-content: center; margin-top: 20px; flex-wrap: wrap;">
+                <a href="${data.formUrl}" target="_blank" class="btn btn-success btn-lg">
+                    <i class="fab fa-wpforms"></i> Open Google Form
+                </a>
+                ${data.jobId ? `<a href="/jobs/${data.jobId}" class="btn btn-primary btn-lg">
+                    <i class="fas fa-users"></i> Manage Candidates
+                </a>` : ''}
+            </div>`;
         } else {
             successMsg += '<br><br>Check your Google Forms dashboard.';
+            if (data.jobId) {
+                successMsg += `<br><br><a href="/jobs/${data.jobId}" class="btn btn-primary btn-lg">
+                    <i class="fas fa-users"></i> Manage Candidates
+                </a>`;
+            }
         }
         
         document.getElementById('success-message').innerHTML = successMsg;

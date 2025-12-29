@@ -3,7 +3,7 @@
 **Transform Job Descriptions into Professional Interview Questions & Automate Candidate Scoring.**
 
 ![Project Status](https://img.shields.io/badge/Status-Active-success)
-![Python](https://img.shields.io/badge/Python-3.9+-blue)
+![Python](https://img.shields.io/badge/Python-3.11+-blue)
 ![Flask](https://img.shields.io/badge/Framework-Flask-green)
 ![Vercel](https://img.shields.io/badge/Deployment-Vercel-black)
 ![Neon](https://img.shields.io/badge/Database-Neon%20Postgres-orange)
@@ -13,64 +13,103 @@
 This tool streamlines the recruitment process by leveraging AI to:
 1.  **Generate Interview Questions**: Analyze job descriptions and create tailored technical, behavioral, and situational questions.
 2.  **Automate Applications**: Create Google Forms automatically that sync responses to your dashboard.
-3.  **Score Candidates**: AI analyzes resumes against the job description, providing a match score (0-100%) and detailed feedback.
-4.  **Rank Applicants**: View a leaderboard of candidates based on their suitability.
+3.  **Score Candidates**: AI analyzes resumes against the job description, providing a match score (0-100%) with detailed breakdown.
+4.  **Kanban Board**: Track candidates through stages (Applied → Interview → Rejected) with drag-and-drop.
 
 ---
 
-## ⚡ Recent Advancements (v2.0)
+## ⚡ Features
 
-We have significantly upgraded the architecture for scalability and reliability:
+### Core Features
+*   **☁️ Dual Deployment**: Run locally (SQLite) or deploy to Vercel (Neon PostgreSQL)
+*   **🤖 Multi-AI Support**: Perplexity (default), OpenAI GPT-4, or Claude 3.5
+*   **📊 Intelligent Scoring**: 9-dimension analysis with red flag detection
+*   **📧 Email Notifications**: Automated confirmation and rejection emails
+*   **🔗 LinkedIn Integration**: Detect LinkedIn profiles and apply scoring penalty if missing
 
-*   **☁️ Serverless Deployment (Vercel)**: The backend now runs on Vercel's robust serverless infrastructure, ensuring high availability and zero maintenance.
-*   **🗄️ Persistent Database (Neon Postgres)**: Replaced local JSON storage with a cloud-hosted PostgreSQL database (Neon) to persist candidate data across serverless function restarts.
-*   **🤖 Intelligent Resume Parsing**: 
-    *   Handles **Google Drive** file uploads directly from Google Forms.
-    *   Automatically converts private Drive files to accessible links for the AI scorer.
-    *   Falls back to robust text extraction if file download fails.
-*   **🔄 Real-time Webhooks**: Seamless integration between Google Forms and the Python backend via a custom Google Apps Script.
+### Scoring System (v2.0)
+*   **Skills Match** (20%): Technical skills alignment
+*   **Job Relevance** (25%): Overall fit for the role
+*   **Technical Depth** (15%): Expertise level assessment
+*   **Project Complexity** (10%): Quality of past projects
+*   **Experience** (10%): Years and relevance
+*   **Communication** (5%): Writing quality in answers
+*   **Culture Fit** (5%): Team compatibility signals
+*   **Education** (5%): Academic background
+*   **Keywords** (5%): Job-specific terminology
+
+### Penalties & Bonuses
+*   **-2 points**: Missing LinkedIn profile
+*   **-5 points per red flag**: Employment gaps, job hopping, etc.
+*   **-12 points**: AI-generated answers detected
+*   **+8 points**: Unicorn candidate (perfect match)
+*   **+5 points**: Strong leadership indicators
 
 ---
 
-## 🛠️ Installation & Setup
+## 🚀 Quick Start
 
-We have moved the detailed installation instructions to a dedicated guide.
+### Local Development
 
-👉 **[CLICK HERE FOR THE COMPLETE SETUP GUIDE](SETUP_GUIDE.md)** 👈
+```powershell
+# Clone and setup
+git clone https://github.com/YOUR_USERNAME/AI_JobFormMaker.git
+cd AI_JobFormMaker
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt
 
-The guide covers:
-1.  **Local Development**: Running the Flask app on your machine.
-2.  **Database Setup**: Creating a free Postgres database on Neon.
-3.  **Cloud Deployment**: Deploying to Vercel in minutes.
-4.  **Google Forms Integration**: Setting up the automation script.
+# Configure
+copy .env.example .env
+# Edit .env with your API keys
+
+# Run
+python app.py
+```
+
+Access at: **http://localhost:5000**
+
+### Production Deployment
+
+See **[SETUP_GUIDE.md](SETUP_GUIDE.md)** for complete instructions on:
+- Neon PostgreSQL setup
+- Vercel deployment
+- Google Apps Script integration
+- Email configuration
 
 ---
 
 ## 🧩 Tech Stack
 
-*   **Backend**: Python (Flask)
-*   **Frontend**: HTML5, CSS3 (Glassmorphism UI), JavaScript
-*   **Database**: PostgreSQL (via Neon.tech)
-*   **AI Engine**: Perplexity AI (Default), OpenAI GPT-4, or Claude 3.5
-*   **Hosting**: Vercel (Serverless)
-*   **Integration**: Google Apps Script (Forms & Sheets)
+| Layer | Technology |
+|-------|------------|
+| **Backend** | Python 3.11, Flask |
+| **Frontend** | HTML5, CSS3 (Glassmorphism), JavaScript |
+| **Database** | SQLite (local) / PostgreSQL (production) |
+| **AI** | Perplexity AI, OpenAI, Claude |
+| **Hosting** | Vercel (serverless) |
+| **Integration** | Google Apps Script |
 
 ---
 
 ## 📂 Project Structure
 
 ```
-├── app.py                  # Main Flask Application & Webhook Handler
-├── services/               # Core Logic Modules
-│   ├── ai_service.py       # AI Question Generation & Scoring
-│   ├── storage_service.py  # Database Interactions (Postgres)
-│   ├── resume_parser.py    # PDF/DOCX Text Extraction
-│   └── candidate_scorer.py # Scoring Algorithm
-├── static/                 # CSS & JavaScript
-├── templates/              # HTML Templates
-├── final_google_script.js  # Google Apps Script for Forms Integration
-├── SETUP_GUIDE.md          # Detailed Installation Instructions
-└── requirements.txt        # Python Dependencies
+├── app.py                  # Main Flask application
+├── requirements.txt        # Python dependencies
+├── vercel.json            # Vercel configuration
+├── .env.example           # Environment template
+├── final_google_script.js  # Google Forms integration
+├── services/
+│   ├── ai_service.py      # AI analysis
+│   ├── candidate_scorer.py # Scoring algorithm
+│   ├── storage_service.py  # Database (SQLite/PostgreSQL)
+│   ├── email_service.py   # Email notifications
+│   └── file_processor.py  # Resume parsing
+├── static/
+│   ├── css/               # Stylesheets
+│   └── js/                # Frontend JavaScript
+└── templates/             # HTML templates
 ```
 
 ---

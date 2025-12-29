@@ -1,227 +1,382 @@
 # 🛠️ Complete Setup & Deployment Guide
 
-This guide covers the end-to-end process of setting up the **AI Recruitment Tool**, connecting it to a **Neon PostgreSQL** database, deploying it to **Vercel**, and integrating it with **Google Forms**.
+This guide covers the end-to-end process of setting up the **AI Recruitment Tool** for both **local development** and **production deployment** on Vercel with Neon PostgreSQL.
 
 ---
 
 ## 📋 Table of Contents
-1.  [Prerequisites](#1-prerequisites)
-2.  [Local Development Setup](#2-local-development-setup)
-3.  [Database Setup (Neon Postgres)](#3-database-setup-neon-postgres)
-4.  [Deployment to Vercel](#4-deployment-to-vercel)
-5.  [Google Forms Integration](#5-google-forms-integration)
-6.  [Troubleshooting](#6-troubleshooting)
+1. [Prerequisites](#1-prerequisites)
+2. [Local Development Setup](#2-local-development-setup)
+3. [Database Setup (Neon Postgres)](#3-database-setup-neon-postgres)
+4. [Deployment to Vercel](#4-deployment-to-vercel)
+5. [Google Apps Script Integration](#5-google-apps-script-integration)
+6. [Email Setup (Gmail SMTP)](#6-email-setup-gmail-smtp)
+7. [Testing the Full Flow](#7-testing-the-full-flow)
+8. [Troubleshooting](#8-troubleshooting)
 
 ---
 
 ## 1. Prerequisites
 
-Before starting, ensure you have the following accounts and tools:
+Before starting, ensure you have:
 
-*   **GitHub Account**: To host your code.
-*   **Vercel Account**: For hosting the application (Free tier is sufficient).
-*   **Neon Console Account**: For the PostgreSQL database (Free tier is sufficient).
-*   **Google Account**: For Google Forms and Sheets.
-*   **Python 3.9+**: Installed on your local machine.
-*   **Git**: Installed on your local machine.
+| Requirement | Purpose | Get It |
+|-------------|---------|--------|
+| **Python 3.11+** | Run the application | [python.org](https://python.org) |
+| **Git** | Version control | [git-scm.com](https://git-scm.com) |
+| **GitHub Account** | Host your code | [github.com](https://github.com) |
+| **Vercel Account** | Host the application | [vercel.com](https://vercel.com) |
+| **Neon Account** | PostgreSQL database | [neon.tech](https://neon.tech) |
+| **Google Account** | Forms & Sheets | [google.com](https://google.com) |
+| **Perplexity API Key** | AI analysis | [perplexity.ai/settings/api](https://www.perplexity.ai/settings/api) |
 
 ---
 
 ## 2. Local Development Setup
 
-1.  **Clone the Repository**
-    ```bash
-    git clone https://github.com/YOUR_USERNAME/AI_JobFormMaker.git
-    cd AI_JobFormMaker
-    ```
+### Step 1: Clone and Setup Environment
 
-2.  **Create a Virtual Environment**
-    ```bash
-    # Windows
-    python -m venv .venv
-    .venv\Scripts\activate
+```powershell
+# Clone the repository
+git clone https://github.com/YOUR_USERNAME/AI_JobFormMaker.git
+cd AI_JobFormMaker
 
-    # Mac/Linux
-    python3 -m venv .venv
-    source .venv/bin/activate
-    ```
+# Create virtual environment
+python -m venv .venv
 
-3.  **Install Dependencies**
-    ```bash
-    pip install -r requirements.txt
-    ```
+# Activate (Windows)
+.venv\Scripts\activate
 
-4.  **Configure Environment Variables**
-    Create a `.env` file in the root directory:
-    ```ini
-    # AI Provider (perplexity, openai, or claude)
-    AI_PROVIDER=perplexity
-    PERPLEXITY_API_KEY=your_perplexity_key
-    
-    # Database (Will be filled in Step 3)
-    DATABASE_URL=
-    
-    # Security
-    SECRET_KEY=your_secret_key
-    ```
+# Activate (Mac/Linux)
+source .venv/bin/activate
 
-5.  **Run Locally**
-    ```bash
-    python start_with_ngrok.py
-    ```
-    Access the app at `http://localhost:5000`.
+# Install dependencies
+pip install -r requirements.txt
+```
+
+### Step 2: Configure Environment Variables
+
+```powershell
+# Copy the example file
+copy .env.example .env
+```
+
+Edit `.env` with your values:
+
+```ini
+# AI Provider
+AI_PROVIDER=perplexity
+PERPLEXITY_API_KEY=pplx-your-actual-key
+
+# Google Apps Script URL (get this in Step 5)
+GOOGLE_SCRIPT_URL=https://script.google.com/macros/s/YOUR_SCRIPT_ID/exec
+
+# Ngrok for local webhooks (get from https://dashboard.ngrok.com)
+NGROK_AUTH_TOKEN=your_ngrok_authtoken
+
+# Email (optional)
+SMTP_SERVER=smtp.gmail.com
+SMTP_PORT=587
+SENDER_EMAIL=your_email@gmail.com
+SENDER_PASSWORD=your_app_password
+SENDER_NAME=Recruitment Team
+```
+
+### Step 3: Run Locally
+
+```powershell
+# Start with Ngrok tunnel (for Google Form webhooks)
+python app.py
+
+# Start without Ngrok (no webhooks)
+python app.py --no-ngrok
+```
+
+Access the app at: **http://localhost:5000**
+
+> **Note**: Local development uses **SQLite** automatically. No database setup needed!
 
 ---
 
 ## 3. Database Setup (Neon Postgres)
 
-Since Vercel is serverless and has ephemeral storage (files disappear after requests), we need a persistent database to store candidate data.
+Vercel's serverless functions have ephemeral storage - files disappear after requests. We use Neon PostgreSQL for persistent data in production.
 
-1.  **Create a Neon Project**
-    *   Go to [Neon Console](https://console.neon.tech/).
-    *   Click **"New Project"**.
-    *   Name it `recruitment-db`.
-    *   Region: Choose one close to you (e.g., US East).
+### Step 1: Create Neon Project
 
-2.  **Get Connection String**
-    *   On the Dashboard, look for **"Connection Details"**.
-    *   Select **"Pooled connection"** (Important for serverless!).
-    *   Copy the Connection String (e.g., `postgres://user:pass@ep-xyz.us-east-2.aws.neon.tech/neondb?sslmode=require`).
+1. Go to [Neon Console](https://console.neon.tech/)
+2. Click **"New Project"**
+3. Name: `recruitment-db`
+4. Region: Choose closest to your users
 
-3.  **Update Local Configuration**
-    *   Paste this string into your local `.env` file as `DATABASE_URL`.
+### Step 2: Get Connection String
 
-4.  **Initialize the Database**
-    *   Run the application locally once (`python app.py`).
-    *   The app automatically checks for the database tables and creates them if they don't exist.
-    *   You should see logs like `Database initialized successfully`.
+1. On Dashboard, find **"Connection Details"**
+2. Select **"Pooled connection"** (IMPORTANT for serverless!)
+3. Copy the connection string
+
+```
+postgresql://user:password@ep-xxx.us-east-2.aws.neon.tech/neondb?sslmode=require
+```
+
+### Step 3: Test Locally (Optional)
+
+To test PostgreSQL locally before deploying:
+
+```ini
+# In .env
+DATABASE_URL=postgresql://user:password@ep-xxx.us-east-2.aws.neon.tech/neondb?sslmode=require
+FORCE_POSTGRES=1
+```
+
+Run the app - it will now use your Neon database.
 
 ---
 
 ## 4. Deployment to Vercel
 
-1.  **Push to GitHub**
-    Ensure your latest code is on GitHub.
-    ```bash
-    git add .
-    git commit -m "Ready for deployment"
-    git push origin main
-    ```
+### Step 1: Push to GitHub
 
-2.  **Import Project in Vercel**
-    *   Go to [Vercel Dashboard](https://vercel.com/dashboard).
-    *   Click **"Add New..."** > **"Project"**.
-    *   Import your GitHub repository.
+```powershell
+git add .
+git commit -m "Ready for Vercel deployment"
+git push origin main
+```
 
-3.  **Configure Project Settings**
-    *   **Framework Preset**: Select **"Other"**.
-    *   **Root Directory**: `./` (default).
-    *   **Build Command**: Leave empty (Vercel handles Python automatically via `vercel.json`).
-    *   **Output Directory**: Leave empty.
+### Step 2: Import to Vercel
 
-4.  **Environment Variables**
-    Add the following variables in the Vercel dashboard:
-    *   `AI_PROVIDER`: `perplexity` (or your choice)
-    *   `PERPLEXITY_API_KEY`: `your_key`
-    *   `DATABASE_URL`: **Paste your Neon Pooled Connection String here.**
-    *   `FLASK_ENV`: `production`
-    *   `VERCEL`: `1`
-    *   `SECRET_KEY`: `your_random_secret_key`
+1. Go to [Vercel Dashboard](https://vercel.com/dashboard)
+2. Click **"Add New..."** → **"Project"**
+3. Import your GitHub repository
+4. **Framework Preset**: Select **"Other"**
+5. Leave Build/Output settings as default
 
-    **Email Notifications (SMTP)**
-    If you want the system to send confirmation and rejection emails to candidates:
-    *   `SMTP_SERVER`: `smtp.gmail.com`
-    *   `SMTP_PORT`: `587`
-    *   `SENDER_EMAIL`: `your_email@gmail.com`
-    *   `SENDER_PASSWORD`: `your_app_password` (See Step 6)
-    *   `SENDER_NAME`: `Recruitment Team - Acceleration Robotics`
+### Step 3: Configure Environment Variables
 
-5.  **Deploy**
-    *   Click **"Deploy"**.
-    *   Wait for the build to finish.
-    *   Once deployed, you will get a domain (e.g., `https://ai-job-maker.vercel.app`).
+Add these in Vercel Dashboard → Project → Settings → Environment Variables:
 
----
+| Variable | Value | Notes |
+|----------|-------|-------|
+| `AI_PROVIDER` | `perplexity` | or `openai`, `claude` |
+| `PERPLEXITY_API_KEY` | `pplx-xxx...` | Your API key |
+| `DATABASE_URL` | `postgresql://...` | Neon **Pooled** connection string |
+| `GOOGLE_SCRIPT_URL` | `https://script.google.com/...` | From Step 5 |
+| `SMTP_SERVER` | `smtp.gmail.com` | Optional - for emails |
+| `SMTP_PORT` | `587` | Optional |
+| `SENDER_EMAIL` | `your@gmail.com` | Optional |
+| `SENDER_PASSWORD` | `app-password` | Optional - See Step 6 |
+| `SENDER_NAME` | `Recruitment Team` | Optional |
 
-## 5. Email Setup (Gmail SMTP)
+### Step 4: Deploy
 
-To enable automated emails (rejection/acceptance/confirmation), you need a Gmail App Password.
+1. Click **"Deploy"**
+2. Wait for build to complete
+3. Get your URL: `https://your-app.vercel.app`
 
-1.  **Go to Google Account Settings**
-    *   Visit [myaccount.google.com](https://myaccount.google.com/).
-    *   Go to **Security**.
+### Step 5: Verify Deployment
 
-2.  **Enable 2-Step Verification**
-    *   If not already enabled, turn on **2-Step Verification**.
-
-3.  **Create App Password**
-    *   Search for "App passwords" in the search bar at the top.
-    *   Create a new app password named "Recruitment App".
-    *   Copy the 16-character password (e.g., `abcd efgh ijkl mnop`).
-
-4.  **Add to Environment Variables**
-    *   Use this password for `SENDER_PASSWORD` in your `.env` file (local) and Vercel Environment Variables (production).
+Visit these endpoints:
+- `https://your-app.vercel.app/` - Dashboard
+- `https://your-app.vercel.app/api/health` - Should show `"database": "postgresql"`
 
 ---
 
-## 6. Google Forms Integration
+## 5. Google Apps Script Integration
 
-Now we connect Google Forms to your deployed Vercel app.
+This connects Google Forms to your application for automatic candidate processing.
 
-1.  **Create a Google Form**
-    *   Go to Google Forms and create a new blank form.
-    *   Give it a title (e.g., "Senior Developer Application").
+### Step 1: Create Google Apps Script
 
-2.  **Open Script Editor**
-    *   Click the **three dots (⋮)** in the top right corner of the form editor.
-    *   Select **"Script editor"** (or go to **Extensions** > **Apps Script**).
+1. Go to [Google Apps Script](https://script.google.com/)
+2. Click **"New Project"**
+3. Delete any existing code
+4. Copy the entire content of `final_google_script.js` from this repo
+5. Paste into the script editor
 
-3.  **Install the Script**
-    *   Delete any code in `Code.gs`.
-    *   Copy the content of `final_google_script.js` from this repository.
-    *   Paste it into the script editor.
+### Step 2: Configure Webhook URL
 
-4.  **Configure the Script**
-    *   Find the line: `var WEBHOOK_URL = "..."`
-    *   Replace it with your **Vercel App URL** + `/api/webhook/application`.
-    *   Example: `var WEBHOOK_URL = "https://your-app.vercel.app/api/webhook/application";`
+Find this line near the top:
+```javascript
+var WEBHOOK_URL = "https://YOUR_VERCEL_APP_URL/api/webhook/application";
+```
 
-5.  **Deploy as Web App**
-    *   Click **"Deploy"** (blue button) > **"New deployment"**.
-    *   **Select type**: "Web app".
-    *   **Description**: "v1".
-    *   **Execute as**: "Me".
-    *   **Who has access**: **"Anyone"** (Crucial for the form to work publicly).
-    *   Click **"Deploy"**.
+Replace with your actual URL:
+```javascript
+var WEBHOOK_URL = "https://your-app.vercel.app/api/webhook/application";
+```
 
-6.  **Authorize & Setup Trigger**
-    *   In the script editor, select the function `setupTrigger` from the dropdown menu.
-    *   Click **"Run"**.
-    *   Grant the necessary permissions (Drive, Forms, External Requests).
-    *   *Note: You might see a "Google hasn't verified this app" warning. Click "Advanced" > "Go to (unsafe)" since it's your own script.*
+### Step 3: Deploy as Web App
 
-7.  **Test It!**
-    *   Fill out your Google Form.
-    *   Upload a dummy resume.
-    *   Submit.
-    *   Check your Vercel App Dashboard (`/ranking` page) to see the candidate appear!
+1. Click **"Deploy"** → **"New deployment"**
+2. **Type**: Web app
+3. **Execute as**: Me
+4. **Who has access**: **Anyone** (Important!)
+5. Click **"Deploy"**
+6. **Copy the Web App URL** - you'll need this for your `.env`
+
+### Step 4: Authorize Permissions
+
+1. Click **"Authorize access"**
+2. Select your Google account
+3. Click **"Advanced"** → **"Go to (project name) (unsafe)"**
+4. Click **"Allow"**
+
+### Step 5: Update Your App Configuration
+
+Add the Web App URL to:
+
+**Local** (`.env`):
+```ini
+GOOGLE_SCRIPT_URL=https://script.google.com/macros/s/YOUR_SCRIPT_ID/exec
+```
+
+**Vercel** (Environment Variables):
+Same URL in `GOOGLE_SCRIPT_URL`
 
 ---
 
-## 7. Troubleshooting
+## 6. Email Setup (Gmail SMTP)
 
-### Resume "Not Found" (404)
-*   **Cause**: Vercel cannot store files locally.
-*   **Solution**: The system now saves the **original Google Drive URL** instead of a local path. Ensure your Google Script is updated to the latest version which handles file permissions correctly.
+Optional: Enable automated emails for candidate notifications.
 
-### Webhook Error 500
-*   **Cause**: Database connection issues or invalid data.
-*   **Solution**: Check Vercel Logs. Ensure `DATABASE_URL` is correct and uses the "Pooled" connection string from Neon.
+### Step 1: Enable 2-Step Verification
 
-### "Script function not found"
-*   **Cause**: You didn't save the script before running.
-*   **Solution**: Press Ctrl+S in the Google Apps Script editor before clicking Run.
+1. Go to [Google Account Security](https://myaccount.google.com/security)
+2. Enable **2-Step Verification**
 
-### Email Sending Failed
-*   **Cause**: Invalid credentials or 2FA not enabled.
-*   **Solution**: Ensure you are using an **App Password**, not your regular Gmail password. Check Vercel logs for SMTP authentication errors.
+### Step 2: Create App Password
+
+1. Go to [App Passwords](https://myaccount.google.com/apppasswords)
+2. Select app: **Mail**
+3. Select device: **Other** → Name it "Recruitment App"
+4. Click **Generate**
+5. Copy the 16-character password (e.g., `abcd efgh ijkl mnop`)
+
+### Step 3: Configure in App
+
+```ini
+SMTP_SERVER=smtp.gmail.com
+SMTP_PORT=587
+SENDER_EMAIL=your_email@gmail.com
+SENDER_PASSWORD=abcdefghijklmnop  # No spaces
+SENDER_NAME=Recruitment Team
+```
+
+---
+
+## 7. Testing the Full Flow
+
+### Test 1: Create a Job
+
+1. Go to your app's dashboard
+2. Click **"Create New Job"**
+3. Enter job title and description
+4. Click **"Generate Questions"**
+5. Click **"Create Application Form"**
+6. Copy the Google Form URL
+
+### Test 2: Submit an Application
+
+1. Open the Google Form URL
+2. Fill in candidate details
+3. Upload a test resume
+4. Submit the form
+
+### Test 3: Verify in Dashboard
+
+1. Go to your app's dashboard
+2. Click on the job
+3. Switch to **Kanban View**
+4. The candidate should appear in the **"Applied"** column
+
+---
+
+## 8. Troubleshooting
+
+### Database Issues
+
+| Problem | Solution |
+|---------|----------|
+| "Connection refused" | Check DATABASE_URL uses **Pooled** connection |
+| "SSL required" | Ensure `?sslmode=require` in connection string |
+| "Table not found" | Restart app to auto-create tables |
+
+### Google Form Issues
+
+| Problem | Solution |
+|---------|----------|
+| "Webhook not triggered" | Run `setupTrigger` function in Apps Script |
+| "Permission denied" | Re-authorize the script |
+| "500 error" | Check Vercel logs for details |
+
+### Candidate Not Appearing
+
+| Problem | Solution |
+|---------|----------|
+| Shows in List but not Kanban | Fixed! Status mapping now handles `processed` |
+| Resume "Not Found" | Google Drive sharing permissions issue |
+| Score is 0 | Check AI API key is valid |
+
+### Email Not Sending
+
+| Problem | Solution |
+|---------|----------|
+| "Authentication failed" | Use App Password, not regular password |
+| "SMTP error" | Ensure 2FA is enabled on Gmail |
+| No errors but no email | Check spam folder |
+
+---
+
+## 🚀 Quick Reference
+
+### Local Development
+```powershell
+# Activate environment
+.venv\Scripts\activate
+
+# Start with webhooks
+python app.py
+
+# Start without webhooks
+python app.py --no-ngrok
+```
+
+### Environment Summary
+
+| Environment | Database | Webhooks | URL |
+|-------------|----------|----------|-----|
+| **Local** | SQLite | Ngrok tunnel | `http://localhost:5000` |
+| **Vercel** | Neon PostgreSQL | Direct | `https://your-app.vercel.app` |
+
+### Key URLs (Production)
+
+- **Dashboard**: `https://your-app.vercel.app/`
+- **Health Check**: `https://your-app.vercel.app/api/health`
+- **Webhook**: `https://your-app.vercel.app/api/webhook/application`
+
+---
+
+## 📁 Project Structure
+
+```
+├── app.py                 # Main Flask application
+├── requirements.txt       # Python dependencies
+├── vercel.json           # Vercel configuration
+├── runtime.txt           # Python version for Vercel
+├── .env.example          # Environment template
+├── final_google_script.js # Google Apps Script code
+├── services/
+│   ├── ai_service.py     # AI analysis (Perplexity/OpenAI/Claude)
+│   ├── candidate_scorer.py # Scoring algorithm
+│   ├── storage_service.py  # Database (SQLite/PostgreSQL)
+│   ├── email_service.py   # Email notifications
+│   └── file_processor.py  # Resume parsing
+├── static/
+│   ├── css/              # Stylesheets
+│   └── js/               # Frontend JavaScript
+└── templates/            # HTML templates
+```
+
+---
+
+**Need help?** Check the Vercel logs or open an issue on GitHub.

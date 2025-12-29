@@ -20,12 +20,23 @@ class StorageService:
     def __init__(self):
         # Check for DATABASE_URL environment variable (Vercel/Neon)
         self.db_url = os.environ.get('DATABASE_URL')
-        self.is_postgres = bool(self.db_url) and HAS_POSTGRES
+        
+        # Determine if we should use Postgres
+        # We use Postgres if DATABASE_URL is present AND:
+        # 1. We are in a cloud environment (VERCEL or RAILWAY_ENVIRONMENT)
+        # 2. OR the user explicitly sets FORCE_POSTGRES=1
+        is_cloud = os.environ.get('VERCEL') or os.environ.get('RAILWAY_ENVIRONMENT')
+        force_postgres = os.environ.get('FORCE_POSTGRES')
+        
+        self.is_postgres = bool(self.db_url) and HAS_POSTGRES and (is_cloud or force_postgres)
         
         if self.is_postgres:
             print("✅ STORAGE: Using PostgreSQL (Cloud Persistent)")
         else:
             self._ensure_data_dir()
+            if self.db_url and HAS_POSTGRES and not is_cloud:
+                print("ℹ️  STORAGE: DATABASE_URL detected but using SQLite for local development.")
+                print("            (Set FORCE_POSTGRES=1 in .env to override)")
             print(f"✅ STORAGE: Using SQLite at {DB_FILE} (Local Persistent)")
             
         self._init_db()
@@ -42,8 +53,12 @@ class StorageService:
         if self.is_postgres:
             return psycopg2.connect(self.db_url)
         else:
-            conn = sqlite3.connect(DB_FILE)
+            # Add timeout for concurrent access (wait up to 30 seconds for lock)
+            conn = sqlite3.connect(DB_FILE, timeout=30.0)
             conn.row_factory = sqlite3.Row
+            # Enable WAL mode for better concurrent read/write performance
+            conn.execute('PRAGMA journal_mode=WAL')
+            conn.execute('PRAGMA busy_timeout=30000')  # 30 second timeout
             return conn
 
     def _init_db(self):
@@ -51,14 +66,29 @@ class StorageService:
         cursor = conn.cursor()
         
         try:
+            # Create jobs table
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS jobs (
+                    id TEXT PRIMARY KEY,
+                    title TEXT,
+                    description TEXT,
+                    created_at TEXT,
+                    status TEXT,
+                    form_url TEXT,
+                    raw_data TEXT
+                )
+            ''')
+
             # Syntax is compatible for this simple table structure
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS candidates (
                     id TEXT PRIMARY KEY,
+                    job_id TEXT,
                     name TEXT,
                     email TEXT,
                     phone TEXT,
                     resume_url TEXT,
+                    linkedin_url TEXT,
                     job_description TEXT,
                     timestamp TEXT,
                     score REAL,
@@ -67,6 +97,39 @@ class StorageService:
                     raw_data TEXT
                 )
             ''')
+            
+            # Check if job_id column exists in candidates (for migration)
+            try:
+                if self.is_postgres:
+                    cursor.execute("SELECT column_name FROM information_schema.columns WHERE table_name='candidates' AND column_name='job_id'")
+                    if not cursor.fetchone():
+                        cursor.execute("ALTER TABLE candidates ADD COLUMN job_id TEXT")
+                    
+                    cursor.execute("SELECT column_name FROM information_schema.columns WHERE table_name='candidates' AND column_name='linkedin_url'")
+                    if not cursor.fetchone():
+                        cursor.execute("ALTER TABLE candidates ADD COLUMN linkedin_url TEXT")
+                    
+                    # Check for edit_url in jobs
+                    cursor.execute("SELECT column_name FROM information_schema.columns WHERE table_name='jobs' AND column_name='edit_url'")
+                    if not cursor.fetchone():
+                        cursor.execute("ALTER TABLE jobs ADD COLUMN edit_url TEXT")
+                else:
+                    # SQLite check
+                    cursor.execute("PRAGMA table_info(candidates)")
+                    columns = [info[1] for info in cursor.fetchall()]
+                    if 'job_id' not in columns:
+                        cursor.execute("ALTER TABLE candidates ADD COLUMN job_id TEXT")
+                    if 'linkedin_url' not in columns:
+                        cursor.execute("ALTER TABLE candidates ADD COLUMN linkedin_url TEXT")
+                        
+                    # Check for edit_url in jobs
+                    cursor.execute("PRAGMA table_info(jobs)")
+                    columns = [info[1] for info in cursor.fetchall()]
+                    if 'edit_url' not in columns:
+                        cursor.execute("ALTER TABLE jobs ADD COLUMN edit_url TEXT")
+            except Exception as e:
+                print(f"⚠️ Error checking/adding columns: {e}")
+
             conn.commit()
         except Exception as e:
             # Handle Postgres race condition where type exists but table creation fails
@@ -98,7 +161,140 @@ class StorageService:
                 print(f"Migration failed: {e}")
         conn.close()
 
-    def get_all_candidates(self) -> List[Dict]:
+    def create_job(self, job_data: Dict) -> Dict:
+        if 'id' not in job_data:
+            job_data['id'] = f"job_{int(datetime.now().timestamp())}_{os.urandom(4).hex()}"
+        if 'created_at' not in job_data:
+            job_data['created_at'] = datetime.now().isoformat()
+        if 'status' not in job_data:
+            job_data['status'] = 'active'
+            
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        
+        raw_data_json = json.dumps(job_data)
+        
+        values = (
+            job_data['id'],
+            job_data.get('title', 'Untitled Job'),
+            job_data.get('description', ''),
+            job_data['created_at'],
+            job_data['status'],
+            job_data.get('form_url', ''),
+            job_data.get('edit_url', ''),
+            raw_data_json
+        )
+        
+        if self.is_postgres:
+            cursor.execute('''
+                INSERT INTO jobs (id, title, description, created_at, status, form_url, edit_url, raw_data)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            ''', values)
+        else:
+            cursor.execute('''
+                INSERT INTO jobs (id, title, description, created_at, status, form_url, edit_url, raw_data)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ''', values)
+            
+        conn.commit()
+        conn.close()
+        return job_data
+
+    def update_job_status(self, job_id: str, status: str) -> bool:
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        try:
+            if self.is_postgres:
+                cursor.execute("UPDATE jobs SET status = %s WHERE id = %s", (status, job_id))
+            else:
+                cursor.execute("UPDATE jobs SET status = ? WHERE id = ?", (status, job_id))
+            
+            rows_affected = cursor.rowcount
+            conn.commit()
+            
+            if rows_affected == 0:
+                print(f"Warning: No job found with ID {job_id} to update status.")
+                return False
+                
+            return True
+        except Exception as e:
+            print(f"Error updating job status: {e}")
+            return False
+        finally:
+            conn.close()
+
+    def delete_job(self, job_id: str) -> bool:
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        try:
+            # Delete candidates associated with this job first
+            if self.is_postgres:
+                cursor.execute("DELETE FROM candidates WHERE job_id = %s", (job_id,))
+                cursor.execute("DELETE FROM jobs WHERE id = %s", (job_id,))
+            else:
+                cursor.execute("DELETE FROM candidates WHERE job_id = ?", (job_id,))
+                cursor.execute("DELETE FROM jobs WHERE id = ?", (job_id,))
+            
+            conn.commit()
+            return True
+        except Exception as e:
+            print(f"Error deleting job: {e}")
+            return False
+        finally:
+            conn.close()
+
+    def get_all_jobs(self) -> List[Dict]:
+        conn = self._get_connection()
+        if self.is_postgres:
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
+        else:
+            cursor = conn.cursor()
+            
+        cursor.execute('SELECT * FROM jobs ORDER BY created_at DESC')
+        rows = cursor.fetchall()
+        
+        jobs = []
+        for row in rows:
+            job = dict(row)
+            if job.get('raw_data'):
+                try:
+                    raw = json.loads(job['raw_data'])
+                    # Merge raw data, but prioritize column values (e.g. status)
+                    for k, v in raw.items():
+                        if k not in job:
+                            job[k] = v
+                except: pass
+            jobs.append(job)
+            
+        conn.close()
+        return jobs
+
+    def get_job(self, job_id: str) -> Optional[Dict]:
+        conn = self._get_connection()
+        if self.is_postgres:
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            cursor.execute('SELECT * FROM jobs WHERE id = %s', (job_id,))
+        else:
+            cursor = conn.cursor()
+            cursor.execute('SELECT * FROM jobs WHERE id = ?', (job_id,))
+            
+        row = cursor.fetchone()
+        conn.close()
+        
+        if row:
+            job = dict(row)
+            if job.get('raw_data'):
+                try:
+                    raw = json.loads(job['raw_data'])
+                    # Merge raw data, but prioritize column values
+                    for k, v in raw.items():
+                        if k not in job:
+                            job[k] = v
+                except: pass
+            return job
+        return None
+
+    def get_all_candidates(self, job_id: str = None) -> List[Dict]:
         conn = self._get_connection()
         
         if self.is_postgres:
@@ -106,7 +302,16 @@ class StorageService:
         else:
             cursor = conn.cursor()
             
-        cursor.execute('SELECT * FROM candidates ORDER BY timestamp DESC')
+        query = 'SELECT * FROM candidates'
+        params = []
+        
+        if job_id:
+            query += ' WHERE job_id = %s' if self.is_postgres else ' WHERE job_id = ?'
+            params.append(job_id)
+            
+        query += ' ORDER BY timestamp DESC'
+        
+        cursor.execute(query, tuple(params))
         rows = cursor.fetchall()
         
         candidates = []
@@ -219,10 +424,12 @@ class StorageService:
         
         values = (
             candidate_data['id'],
+            candidate_data.get('job_id'),
             candidate_data.get('name') or candidate_data.get('candidate_name'),
             candidate_data.get('email') or candidate_data.get('candidate_email'),
             candidate_data.get('phone') or candidate_data.get('candidate_phone'),
             candidate_data.get('resume_url') or candidate_data.get('file_url'),
+            candidate_data.get('linkedin_url', ''),
             candidate_data.get('job_description'),
             candidate_data['timestamp'],
             candidate_data.get('total_score', 0),
@@ -233,13 +440,15 @@ class StorageService:
         
         if self.is_postgres:
             cursor.execute('''
-                INSERT INTO candidates (id, name, email, phone, resume_url, job_description, timestamp, score, skills, answers, raw_data)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                INSERT INTO candidates (id, job_id, name, email, phone, resume_url, linkedin_url, job_description, timestamp, score, skills, answers, raw_data)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (id) DO UPDATE SET
+                    job_id = EXCLUDED.job_id,
                     name = EXCLUDED.name,
                     email = EXCLUDED.email,
                     phone = EXCLUDED.phone,
                     resume_url = EXCLUDED.resume_url,
+                    linkedin_url = EXCLUDED.linkedin_url,
                     job_description = EXCLUDED.job_description,
                     timestamp = EXCLUDED.timestamp,
                     score = EXCLUDED.score,
@@ -249,35 +458,41 @@ class StorageService:
             ''', values)
         else:
             cursor.execute('''
-                INSERT OR REPLACE INTO candidates (id, name, email, phone, resume_url, job_description, timestamp, score, skills, answers, raw_data)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT OR REPLACE INTO candidates (id, job_id, name, email, phone, resume_url, linkedin_url, job_description, timestamp, score, skills, answers, raw_data)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', values)
             
         conn.commit()
         conn.close()
         return candidate_data
 
-    def get_recent_candidate_by_email(self, email: str, minutes: int = 10) -> Optional[Dict]:
-        """Check if a candidate with this email was added recently"""
+    def get_recent_candidate_by_email(self, email: str, job_id: str = None, minutes: int = 10) -> Optional[Dict]:
+        """Check if a candidate with this email (and optionally job_id) was added recently"""
         if not email:
             return None
             
         conn = self._get_connection()
         if self.is_postgres:
             cursor = conn.cursor(cursor_factory=RealDictCursor)
-            # Postgres timestamp comparison
-            # Cast text timestamp to actual timestamp for comparison
-            # Use make_interval for safe parameter substitution
-            cursor.execute('''
-                SELECT * FROM candidates 
-                WHERE email = %s 
-                AND timestamp::timestamp > (NOW() - make_interval(mins := %s))
-            ''', (email, minutes))
+            if job_id:
+                cursor.execute('''
+                    SELECT * FROM candidates 
+                    WHERE email = %s AND job_id = %s
+                    AND timestamp::timestamp > (NOW() - make_interval(mins := %s))
+                ''', (email, job_id, minutes))
+            else:
+                cursor.execute('''
+                    SELECT * FROM candidates 
+                    WHERE email = %s 
+                    AND timestamp::timestamp > (NOW() - make_interval(mins := %s))
+                ''', (email, minutes))
         else:
             cursor = conn.cursor()
-            # SQLite timestamp comparison (assuming ISO format strings)
-            # We'll fetch matches by email and filter in python to be safe with string formats
-            cursor.execute('SELECT * FROM candidates WHERE email = ?', (email,))
+            # SQLite: Fetch and filter in Python for safety
+            if job_id:
+                cursor.execute('SELECT * FROM candidates WHERE email = ? AND job_id = ?', (email, job_id))
+            else:
+                cursor.execute('SELECT * FROM candidates WHERE email = ?', (email,))
         
         rows = cursor.fetchall()
         conn.close()
@@ -313,3 +528,77 @@ class StorageService:
         cursor.execute('DELETE FROM candidates')
         conn.commit()
         conn.close()
+
+    def fix_orphan_candidates(self, target_job_id: str = None) -> Dict:
+        """
+        Fix candidates with no job_id by assigning them to a job.
+        If target_job_id is provided, assign to that job.
+        If only one active job exists, auto-assign to it.
+        Returns stats about what was fixed.
+        """
+        jobs = self.get_all_jobs()
+        candidates = self.get_all_candidates()
+        
+        orphans = [c for c in candidates if not c.get('job_id')]
+        
+        if not orphans:
+            return {'fixed': 0, 'message': 'No orphan candidates found'}
+        
+        # Determine target job
+        if target_job_id:
+            target_job = next((j for j in jobs if j['id'] == target_job_id), None)
+            if not target_job:
+                return {'fixed': 0, 'error': f'Job {target_job_id} not found'}
+        else:
+            active_jobs = [j for j in jobs if j.get('status') == 'active']
+            if len(active_jobs) == 1:
+                target_job = active_jobs[0]
+            elif len(active_jobs) == 0:
+                return {'fixed': 0, 'error': 'No active jobs found'}
+            else:
+                return {
+                    'fixed': 0, 
+                    'error': 'Multiple active jobs - specify target_job_id',
+                    'jobs': [{'id': j['id'], 'title': j['title']} for j in active_jobs]
+                }
+        
+        # Fix orphans
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        
+        fixed_count = 0
+        for c in orphans:
+            try:
+                if self.is_postgres:
+                    cursor.execute('UPDATE candidates SET job_id = %s WHERE id = %s', 
+                                   (target_job['id'], c['id']))
+                else:
+                    cursor.execute('UPDATE candidates SET job_id = ? WHERE id = ?', 
+                                   (target_job['id'], c['id']))
+                
+                # Also update raw_data
+                raw_data = c.get('raw_data') or {}
+                if isinstance(raw_data, str):
+                    raw_data = json.loads(raw_data)
+                raw_data['job_id'] = target_job['id']
+                
+                if self.is_postgres:
+                    cursor.execute('UPDATE candidates SET raw_data = %s WHERE id = %s', 
+                                   (json.dumps(raw_data), c['id']))
+                else:
+                    cursor.execute('UPDATE candidates SET raw_data = ? WHERE id = ?', 
+                                   (json.dumps(raw_data), c['id']))
+                
+                fixed_count += 1
+            except Exception as e:
+                print(f"Error fixing candidate {c['id']}: {e}")
+        
+        conn.commit()
+        conn.close()
+        
+        return {
+            'fixed': fixed_count,
+            'target_job': target_job['title'],
+            'target_job_id': target_job['id'],
+            'message': f'Fixed {fixed_count} orphan candidates'
+        }
