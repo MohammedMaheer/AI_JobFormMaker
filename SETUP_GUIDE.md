@@ -185,6 +185,24 @@ Visit these endpoints:
 
 This connects Google Forms to your application for automatic candidate processing.
 
+### ⚠️ Understanding the Two URLs
+
+There are **TWO different URLs** that work together:
+
+| URL | Where to Set | Example | Purpose |
+|-----|--------------|---------|---------|
+| **GOOGLE_SCRIPT_URL** | Vercel Environment Variables | `https://script.google.com/macros/s/xxx/exec` | Your app calls this to CREATE forms |
+| **WEBHOOK_URL** | Inside Google Apps Script | `https://your-app.vercel.app/api/webhook/application` | Form submissions go HERE |
+
+**Flow Diagram:**
+```
+Your Vercel App ──(GOOGLE_SCRIPT_URL)──► Google Apps Script ──► Creates Form
+                                                                    │
+Candidate fills form ──► Form Submit ──(WEBHOOK_URL)──► Your Vercel App ──► Scores candidate
+```
+
+---
+
 ### Step 1: Create Google Apps Script
 
 1. Go to [Google Apps Script](https://script.google.com/)
@@ -193,17 +211,19 @@ This connects Google Forms to your application for automatic candidate processin
 4. Copy the entire content of `final_google_script.js` from this repo
 5. Paste into the script editor
 
-### Step 2: Configure Webhook URL
+### Step 2: Configure WEBHOOK_URL (in Google Script)
 
-Find this line near the top:
+Find this line near the top of the script:
 ```javascript
 var WEBHOOK_URL = "https://YOUR_VERCEL_APP_URL/api/webhook/application";
 ```
 
-Replace with your actual URL:
+Replace with your **actual Vercel app URL**:
 ```javascript
-var WEBHOOK_URL = "https://your-app.vercel.app/api/webhook/application";
+var WEBHOOK_URL = "https://recruitment-tool-ar1.vercel.app/api/webhook/application";
 ```
+
+> ⚠️ This URL points TO your Vercel app. When candidates submit the form, data goes here.
 
 ### Step 3: Deploy as Web App
 
@@ -212,7 +232,9 @@ var WEBHOOK_URL = "https://your-app.vercel.app/api/webhook/application";
 3. **Execute as**: Me
 4. **Who has access**: **Anyone** (Important!)
 5. Click **"Deploy"**
-6. **Copy the Web App URL** - you'll need this for your `.env`
+6. **Copy the Web App URL** - This is your `GOOGLE_SCRIPT_URL`
+
+> 📋 The URL looks like: `https://script.google.com/macros/s/AKfycbx.../exec`
 
 ### Step 4: Authorize Permissions
 
@@ -221,17 +243,23 @@ var WEBHOOK_URL = "https://your-app.vercel.app/api/webhook/application";
 3. Click **"Advanced"** → **"Go to (project name) (unsafe)"**
 4. Click **"Allow"**
 
-### Step 5: Update Your App Configuration
+### Step 5: Add GOOGLE_SCRIPT_URL to Vercel
 
-Add the Web App URL to:
+Go to Vercel Dashboard → Project → Settings → Environment Variables:
 
-**Local** (`.env`):
-```ini
-GOOGLE_SCRIPT_URL=https://script.google.com/macros/s/YOUR_SCRIPT_ID/exec
-```
+| Variable | Value |
+|----------|-------|
+| `GOOGLE_SCRIPT_URL` | `https://script.google.com/macros/s/YOUR_SCRIPT_ID/exec` |
 
-**Vercel** (Environment Variables):
-Same URL in `GOOGLE_SCRIPT_URL`
+> ⚠️ This URL points FROM your Vercel app TO Google. It's used to create forms.
+
+### Step 6: Redeploy After Changes
+
+If you update the Google Apps Script code:
+1. Click **Deploy** → **Manage deployments**
+2. Click the **pencil icon** (edit)
+3. Change version to **"New version"**
+4. Click **Deploy**
 
 ---
 
