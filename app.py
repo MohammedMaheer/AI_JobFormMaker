@@ -103,6 +103,10 @@ def job_details(job_id):
 def ranking():
     return render_template('ranking.html')
 
+@app.route('/analytics')
+def analytics():
+    return render_template('analytics.html')
+
 
 @app.route('/uploads/<filename>')
 def uploaded_file(filename):
@@ -1292,6 +1296,226 @@ def process_candidate_manual(candidate_id):
         return jsonify({'success': True, 'message': 'Candidate processed successfully'})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ============================================================
+# ANALYTICS API
+# ============================================================
+@app.route('/api/analytics', methods=['GET'])
+def get_analytics():
+    """Get analytics data for dashboard"""
+    analytics = storage_service.get_analytics()
+    return jsonify(analytics)
+
+
+# ============================================================
+# BULK OPERATIONS API
+# ============================================================
+@app.route('/api/bulk/reject', methods=['POST'])
+def bulk_reject():
+    """Bulk reject multiple candidates and send rejection emails"""
+    data = request.json
+    candidate_ids = data.get('ids', [])
+    send_emails = data.get('send_emails', True)
+    
+    if not candidate_ids:
+        return jsonify({'success': False, 'error': 'No candidate IDs provided'}), 400
+    
+    # Get all candidates first to get their details
+    all_candidates = storage_service.get_all_candidates()
+    candidates_map = {c['id']: c for c in all_candidates}
+    
+    rejected = 0
+    emails_sent = 0
+    
+    for cid in candidate_ids:
+        candidate = candidates_map.get(cid)
+        if not candidate:
+            continue
+            
+        # Update status
+        if storage_service.update_status(cid, 'rejected'):
+            rejected += 1
+            
+            # Send email if requested
+            if send_emails:
+                email = candidate.get('candidate_email') or candidate.get('email')
+                name = candidate.get('candidate_name') or candidate.get('name')
+                job_title = candidate.get('job_title')
+                
+                if email and email_service.send_rejection_email(email, name, job_title):
+                    emails_sent += 1
+    
+    return jsonify({
+        'success': True,
+        'rejected': rejected,
+        'emails_sent': emails_sent
+    })
+
+
+@app.route('/api/bulk/status', methods=['POST'])
+def bulk_update_status():
+    """Bulk update status for multiple candidates"""
+    data = request.json
+    candidate_ids = data.get('ids', [])
+    new_status = data.get('status')
+    
+    if not candidate_ids:
+        return jsonify({'success': False, 'error': 'No candidate IDs provided'}), 400
+    if not new_status:
+        return jsonify({'success': False, 'error': 'Status required'}), 400
+    
+    updated = storage_service.bulk_update_status(candidate_ids, new_status)
+    
+    return jsonify({
+        'success': True,
+        'updated': updated
+    })
+
+
+@app.route('/api/bulk/delete', methods=['POST'])
+def bulk_delete():
+    """Bulk delete multiple candidates"""
+    data = request.json
+    candidate_ids = data.get('ids', [])
+    
+    if not candidate_ids:
+        return jsonify({'success': False, 'error': 'No candidate IDs provided'}), 400
+    
+    deleted = 0
+    for cid in candidate_ids:
+        if storage_service.delete_candidate(cid):
+            deleted += 1
+    
+    return jsonify({
+        'success': True,
+        'deleted': deleted
+    })
+
+
+# ============================================================
+# CSV EXPORT API
+# ============================================================
+@app.route('/api/export/candidates', methods=['GET'])
+def export_candidates_csv():
+    """Export candidates to CSV with optional filters"""
+    import csv
+    from io import StringIO
+    
+    # Get filter parameters
+    job_id = request.args.get('job_id')
+    status = request.args.get('status')
+    min_score = request.args.get('min_score', type=int)
+    max_score = request.args.get('max_score', type=int)
+    
+    # Get candidates
+    candidates = storage_service.get_all_candidates(job_id)
+    
+    # Apply filters
+    if status:
+        candidates = [c for c in candidates if c.get('status') == status or 
+                     (status == 'applied' and c.get('status') in ['processed', 'pending', 'applied'])]
+    if min_score is not None:
+        candidates = [c for c in candidates if (c.get('total_score') or c.get('score') or 0) >= min_score]
+    if max_score is not None:
+        candidates = [c for c in candidates if (c.get('total_score') or c.get('score') or 0) <= max_score]
+    
+    # Create CSV
+    output = StringIO()
+    writer = csv.writer(output)
+    
+    # Header
+    writer.writerow([
+        'Name', 'Email', 'Phone', 'Job Title', 'Score', 'Status', 
+        'Skills Match', 'Experience', 'Education', 'Applied Date', 
+        'LinkedIn', 'Resume URL', 'Tags', 'Notes'
+    ])
+    
+    # Data rows
+    for c in candidates:
+        breakdown = c.get('breakdown', {})
+        writer.writerow([
+            c.get('candidate_name') or c.get('name', ''),
+            c.get('candidate_email') or c.get('email', ''),
+            c.get('candidate_phone') or c.get('phone', ''),
+            c.get('job_title', 'Unassigned'),
+            c.get('total_score') or c.get('score', 0),
+            c.get('status', 'applied'),
+            breakdown.get('skills_match', 0),
+            breakdown.get('experience', 0),
+            breakdown.get('education', 0),
+            c.get('timestamp', '')[:10] if c.get('timestamp') else '',
+            c.get('linkedin_url', ''),
+            c.get('resume_url', ''),
+            ', '.join(c.get('tags', [])),
+            c.get('notes', '')
+        ])
+    
+    output.seek(0)
+    
+    return Response(
+        output.getvalue(),
+        mimetype='text/csv',
+        headers={'Content-Disposition': 'attachment; filename=candidates_export.csv'}
+    )
+
+
+# ============================================================
+# EMAIL TEMPLATES API
+# ============================================================
+@app.route('/api/email-templates', methods=['GET'])
+def get_email_templates():
+    """Get available email templates"""
+    templates = {
+        'rejection': {
+            'subject': 'Update on your application{job_suffix}',
+            'body': '''Hi {name},
+
+Thank you for your interest in joining our team and for taking the time to apply{job_mention}.
+
+After careful review of your application and qualifications, we have decided to move forward with other candidates who more closely match our current requirements.
+
+We will keep your resume on file for future openings that may be a good fit.
+
+We wish you the best in your job search.
+
+Best regards,
+{sender_name}'''
+        },
+        'interview': {
+            'subject': 'Interview Invitation{job_suffix}',
+            'body': '''Hi {name},
+
+We were impressed with your application{job_mention} and would like to invite you to an interview.
+
+Interview Details:
+- Position: {job_title}
+- Date & Time: {date_time}
+- Duration: {duration} minutes
+- Type: {interview_type}
+{meeting_link_section}
+
+Please click the link below to add this to your calendar:
+{calendar_link}
+
+If this time doesn't work for you, please reply to this email to reschedule.
+
+Best regards,
+{sender_name}'''
+        },
+        'confirmation': {
+            'subject': 'Application Received{job_suffix} - Next Steps',
+            'body': '''Hi {name},
+
+Thanks for applying{job_mention}! We have successfully received your application.
+
+Our AI-powered system is currently reviewing your profile. We will get back to you shortly with the next steps.
+
+Best regards,
+{sender_name}'''
+        }
+    }
+    return jsonify(templates)
 
 
 if __name__ == '__main__':

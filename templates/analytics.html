@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analytics Dashboard - Acceleration Robotics</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .analytics-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        
+        .analytics-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+        }
+        
+        .analytics-header h1 {
+            font-size: 1.75rem;
+            color: var(--text-primary);
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        
+        .stat-card {
+            background: var(--card-bg);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 16px;
+            padding: 1.5rem;
+            text-align: center;
+            transition: transform 0.2s;
+        }
+        
+        .stat-card:hover {
+            transform: translateY(-5px);
+        }
+        
+        .stat-icon {
+            font-size: 2rem;
+            margin-bottom: 0.75rem;
+            background: linear-gradient(135deg, var(--primary-color), var(--info-color));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .stat-value {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 0.25rem;
+        }
+        
+        .stat-label {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+        
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        
+        .chart-card {
+            background: var(--card-bg);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 16px;
+            padding: 1.5rem;
+        }
+        
+        .chart-card h3 {
+            color: var(--text-primary);
+            margin-bottom: 1rem;
+            font-size: 1.1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .chart-card h3 i {
+            color: var(--primary-color);
+        }
+        
+        .chart-container {
+            position: relative;
+            height: 300px;
+        }
+        
+        .funnel-container {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+        
+        .funnel-stage {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 1rem;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            transition: background 0.2s;
+        }
+        
+        .funnel-stage:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+        
+        .funnel-bar {
+            height: 30px;
+            border-radius: 4px;
+            transition: width 0.5s ease;
+        }
+        
+        .funnel-applied { background: linear-gradient(90deg, #3b82f6, #60a5fa); }
+        .funnel-interview { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
+        .funnel-rejected { background: linear-gradient(90deg, #ef4444, #f87171); }
+        
+        .funnel-label {
+            min-width: 120px;
+            color: var(--text-primary);
+            font-weight: 500;
+        }
+        
+        .funnel-count {
+            min-width: 50px;
+            text-align: right;
+            color: var(--text-secondary);
+            font-weight: 600;
+        }
+        
+        .jobs-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        .jobs-table th, .jobs-table td {
+            padding: 1rem;
+            text-align: left;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        
+        .jobs-table th {
+            color: var(--text-secondary);
+            font-weight: 500;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+        }
+        
+        .jobs-table td {
+            color: var(--text-primary);
+        }
+        
+        .jobs-table tr:hover td {
+            background: rgba(255, 255, 255, 0.03);
+        }
+        
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        
+        .loading-spinner {
+            font-size: 3rem;
+            color: var(--primary-color);
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .back-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--text-secondary);
+            text-decoration: none;
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            transition: all 0.2s;
+        }
+        
+        .back-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: var(--text-primary);
+        }
+        
+        @media (max-width: 768px) {
+            .charts-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="loading" class="loading-overlay">
+        <i class="fas fa-spinner fa-spin loading-spinner"></i>
+    </div>
+
+    <div class="analytics-container">
+        <header class="analytics-header">
+            <div>
+                <a href="/" class="back-btn"><i class="fas fa-arrow-left"></i> Back to Dashboard</a>
+                <h1><i class="fas fa-chart-line"></i> Analytics Dashboard</h1>
+            </div>
+            <button class="btn btn-secondary" onclick="loadAnalytics()">
+                <i class="fas fa-sync"></i> Refresh
+            </button>
+        </header>
+
+        <!-- Stats Cards -->
+        <div class="stats-grid" id="stats-grid">
+            <div class="stat-card">
+                <div class="stat-icon"><i class="fas fa-users"></i></div>
+                <div class="stat-value" id="total-candidates">0</div>
+                <div class="stat-label">Total Candidates</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon"><i class="fas fa-briefcase"></i></div>
+                <div class="stat-value" id="total-jobs">0</div>
+                <div class="stat-label">Total Jobs</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon"><i class="fas fa-check-circle"></i></div>
+                <div class="stat-value" id="active-jobs">0</div>
+                <div class="stat-label">Active Jobs</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon"><i class="fas fa-star"></i></div>
+                <div class="stat-value" id="avg-score">0</div>
+                <div class="stat-label">Avg Score</div>
+            </div>
+        </div>
+
+        <!-- Charts Grid -->
+        <div class="charts-grid">
+            <!-- Hiring Funnel -->
+            <div class="chart-card">
+                <h3><i class="fas fa-filter"></i> Hiring Funnel</h3>
+                <div class="funnel-container" id="funnel-container">
+                    <div class="funnel-stage">
+                        <span class="funnel-label">Applied</span>
+                        <div class="funnel-bar funnel-applied" style="width: 0%"></div>
+                        <span class="funnel-count" id="funnel-applied">0</span>
+                    </div>
+                    <div class="funnel-stage">
+                        <span class="funnel-label">Interview</span>
+                        <div class="funnel-bar funnel-interview" style="width: 0%"></div>
+                        <span class="funnel-count" id="funnel-interview">0</span>
+                    </div>
+                    <div class="funnel-stage">
+                        <span class="funnel-label">Rejected</span>
+                        <div class="funnel-bar funnel-rejected" style="width: 0%"></div>
+                        <span class="funnel-count" id="funnel-rejected">0</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Score Distribution -->
+            <div class="chart-card">
+                <h3><i class="fas fa-chart-bar"></i> Score Distribution</h3>
+                <div class="chart-container">
+                    <canvas id="scoreChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Applications Over Time -->
+            <div class="chart-card">
+                <h3><i class="fas fa-chart-line"></i> Applications Over Time</h3>
+                <div class="chart-container">
+                    <canvas id="timelineChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Candidates by Job -->
+            <div class="chart-card">
+                <h3><i class="fas fa-chart-pie"></i> Candidates by Job</h3>
+                <div class="chart-container">
+                    <canvas id="jobsChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Jobs Table -->
+        <div class="chart-card">
+            <h3><i class="fas fa-list"></i> Jobs Overview</h3>
+            <table class="jobs-table">
+                <thead>
+                    <tr>
+                        <th>Job Title</th>
+                        <th>Candidates</th>
+                        <th>Avg Score</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody id="jobs-table-body">
+                    <!-- Populated by JS -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        let scoreChart, timelineChart, jobsChart;
+
+        async function loadAnalytics() {
+            document.getElementById('loading').style.display = 'flex';
+            
+            try {
+                const response = await fetch('/api/analytics');
+                const data = await response.json();
+                
+                // Update stats
+                document.getElementById('total-candidates').textContent = data.total_candidates || 0;
+                document.getElementById('total-jobs').textContent = data.total_jobs || 0;
+                document.getElementById('active-jobs').textContent = data.active_jobs || 0;
+                document.getElementById('avg-score').textContent = data.avg_score || 0;
+                
+                // Update funnel
+                const statusCounts = data.candidates_by_status || {};
+                const total = data.total_candidates || 1;
+                
+                const applied = (statusCounts.applied || 0);
+                const interview = (statusCounts.interview_scheduled || 0);
+                const rejected = (statusCounts.rejected || 0);
+                
+                document.getElementById('funnel-applied').textContent = applied;
+                document.getElementById('funnel-interview').textContent = interview;
+                document.getElementById('funnel-rejected').textContent = rejected;
+                
+                const maxCount = Math.max(applied, interview, rejected, 1);
+                document.querySelector('.funnel-applied').style.width = `${(applied / maxCount) * 100}%`;
+                document.querySelector('.funnel-interview').style.width = `${(interview / maxCount) * 100}%`;
+                document.querySelector('.funnel-rejected').style.width = `${(rejected / maxCount) * 100}%`;
+                
+                // Score Distribution Chart
+                const scoreDist = data.score_distribution || {};
+                updateScoreChart(scoreDist);
+                
+                // Timeline Chart
+                const timeline = data.applications_over_time || [];
+                updateTimelineChart(timeline);
+                
+                // Jobs Chart
+                const jobsData = data.candidates_by_job || [];
+                updateJobsChart(jobsData);
+                updateJobsTable(jobsData);
+                
+            } catch (error) {
+                console.error('Error loading analytics:', error);
+                alert('Failed to load analytics data');
+            } finally {
+                document.getElementById('loading').style.display = 'none';
+            }
+        }
+
+        function updateScoreChart(scoreDist) {
+            const ctx = document.getElementById('scoreChart').getContext('2d');
+            
+            if (scoreChart) scoreChart.destroy();
+            
+            scoreChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: ['0-20%', '21-40%', '41-60%', '61-80%', '81-100%'],
+                    datasets: [{
+                        label: 'Candidates',
+                        data: [
+                            scoreDist['0-20'] || 0,
+                            scoreDist['21-40'] || 0,
+                            scoreDist['41-60'] || 0,
+                            scoreDist['61-80'] || 0,
+                            scoreDist['81-100'] || 0
+                        ],
+                        backgroundColor: [
+                            'rgba(239, 68, 68, 0.7)',
+                            'rgba(249, 115, 22, 0.7)',
+                            'rgba(234, 179, 8, 0.7)',
+                            'rgba(34, 197, 94, 0.7)',
+                            'rgba(16, 185, 129, 0.7)'
+                        ],
+                        borderColor: [
+                            'rgba(239, 68, 68, 1)',
+                            'rgba(249, 115, 22, 1)',
+                            'rgba(234, 179, 8, 1)',
+                            'rgba(34, 197, 94, 1)',
+                            'rgba(16, 185, 129, 1)'
+                        ],
+                        borderWidth: 1,
+                        borderRadius: 8
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: { color: '#86868b' },
+                            grid: { color: 'rgba(255, 255, 255, 0.05)' }
+                        },
+                        x: {
+                            ticks: { color: '#86868b' },
+                            grid: { display: false }
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateTimelineChart(timeline) {
+            const ctx = document.getElementById('timelineChart').getContext('2d');
+            
+            if (timelineChart) timelineChart.destroy();
+            
+            const labels = timeline.map(t => {
+                const date = new Date(t.date);
+                return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+            });
+            const values = timeline.map(t => t.count);
+            
+            timelineChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Applications',
+                        data: values,
+                        borderColor: 'rgba(59, 130, 246, 1)',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        fill: true,
+                        tension: 0.4,
+                        pointRadius: 4,
+                        pointHoverRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: { color: '#86868b' },
+                            grid: { color: 'rgba(255, 255, 255, 0.05)' }
+                        },
+                        x: {
+                            ticks: { color: '#86868b', maxRotation: 45 },
+                            grid: { display: false }
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateJobsChart(jobsData) {
+            const ctx = document.getElementById('jobsChart').getContext('2d');
+            
+            if (jobsChart) jobsChart.destroy();
+            
+            const colors = [
+                'rgba(59, 130, 246, 0.7)',
+                'rgba(16, 185, 129, 0.7)',
+                'rgba(245, 158, 11, 0.7)',
+                'rgba(239, 68, 68, 0.7)',
+                'rgba(139, 92, 246, 0.7)',
+                'rgba(236, 72, 153, 0.7)'
+            ];
+            
+            jobsChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: jobsData.map(j => j.title || 'Unknown'),
+                    datasets: [{
+                        data: jobsData.map(j => j.count),
+                        backgroundColor: colors.slice(0, jobsData.length),
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'right',
+                            labels: {
+                                color: '#86868b',
+                                padding: 15
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateJobsTable(jobsData) {
+            const tbody = document.getElementById('jobs-table-body');
+            
+            if (!jobsData.length) {
+                tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--text-secondary);">No jobs found</td></tr>';
+                return;
+            }
+            
+            tbody.innerHTML = jobsData.map(job => `
+                <tr>
+                    <td>${job.title || 'Unknown'}</td>
+                    <td>${job.count || 0}</td>
+                    <td>-</td>
+                    <td><span class="status-badge status-active">Active</span></td>
+                </tr>
+            `).join('');
+        }
+
+        // Load on page load
+        document.addEventListener('DOMContentLoaded', loadAnalytics);
+    </script>
+</body>
+</html>

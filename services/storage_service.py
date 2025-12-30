@@ -144,6 +144,26 @@ class StorageService:
             except Exception as e:
                 print(f"⚠️ Error checking/adding columns: {e}")
 
+            # Create indexes for performance
+            try:
+                if self.is_postgres:
+                    cursor.execute("CREATE INDEX IF NOT EXISTS idx_candidates_job_id ON candidates(job_id)")
+                    cursor.execute("CREATE INDEX IF NOT EXISTS idx_candidates_email ON candidates(email)")
+                    cursor.execute("CREATE INDEX IF NOT EXISTS idx_candidates_score ON candidates(score DESC)")
+                    cursor.execute("CREATE INDEX IF NOT EXISTS idx_candidates_timestamp ON candidates(timestamp DESC)")
+                    cursor.execute("CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status)")
+                    cursor.execute("CREATE INDEX IF NOT EXISTS idx_jobs_created_at ON jobs(created_at DESC)")
+                else:
+                    cursor.execute("CREATE INDEX IF NOT EXISTS idx_candidates_job_id ON candidates(job_id)")
+                    cursor.execute("CREATE INDEX IF NOT EXISTS idx_candidates_email ON candidates(email)")
+                    cursor.execute("CREATE INDEX IF NOT EXISTS idx_candidates_score ON candidates(score DESC)")
+                    cursor.execute("CREATE INDEX IF NOT EXISTS idx_candidates_timestamp ON candidates(timestamp DESC)")
+                    cursor.execute("CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status)")
+                    cursor.execute("CREATE INDEX IF NOT EXISTS idx_jobs_created_at ON jobs(created_at DESC)")
+                print("✅ Database indexes created/verified")
+            except Exception as e:
+                print(f"⚠️ Error creating indexes (non-critical): {e}")
+
             conn.commit()
         except Exception as e:
             # Handle Postgres race condition where type exists but table creation fails
@@ -561,6 +581,26 @@ class StorageService:
         conn.commit()
         conn.close()
 
+    def delete_candidate(self, candidate_id: str) -> bool:
+        """Delete a single candidate by ID"""
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        
+        try:
+            if self.is_postgres:
+                cursor.execute('DELETE FROM candidates WHERE id = %s', (candidate_id,))
+            else:
+                cursor.execute('DELETE FROM candidates WHERE id = ?', (candidate_id,))
+            
+            rows_affected = cursor.rowcount
+            conn.commit()
+            conn.close()
+            return rows_affected > 0
+        except Exception as e:
+            print(f"Error deleting candidate: {e}")
+            conn.close()
+            return False
+
     def fix_orphan_candidates(self, target_job_id: str = None) -> Dict:
         """
         Fix candidates with no job_id by assigning them to a job.
@@ -673,3 +713,114 @@ class StorageService:
             print(f"Error updating tags: {e}")
             conn.close()
             return False
+
+    def get_analytics(self) -> Dict:
+        """Get analytics data for dashboard"""
+        conn = self._get_connection()
+        if self.is_postgres:
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
+        else:
+            cursor = conn.cursor()
+        
+        analytics = {
+            'total_candidates': 0,
+            'total_jobs': 0,
+            'active_jobs': 0,
+            'candidates_by_status': {},
+            'candidates_by_job': [],
+            'score_distribution': {'0-20': 0, '21-40': 0, '41-60': 0, '61-80': 0, '81-100': 0},
+            'applications_over_time': [],
+            'avg_score': 0,
+            'top_skills': []
+        }
+        
+        try:
+            # Total candidates
+            cursor.execute('SELECT COUNT(*) as count FROM candidates')
+            row = cursor.fetchone()
+            analytics['total_candidates'] = dict(row)['count'] if row else 0
+            
+            # Total jobs
+            cursor.execute('SELECT COUNT(*) as count FROM jobs')
+            row = cursor.fetchone()
+            analytics['total_jobs'] = dict(row)['count'] if row else 0
+            
+            # Active jobs
+            if self.is_postgres:
+                cursor.execute("SELECT COUNT(*) as count FROM jobs WHERE status = %s", ('active',))
+            else:
+                cursor.execute("SELECT COUNT(*) as count FROM jobs WHERE status = ?", ('active',))
+            row = cursor.fetchone()
+            analytics['active_jobs'] = dict(row)['count'] if row else 0
+            
+            # Average score
+            cursor.execute('SELECT AVG(score) as avg FROM candidates WHERE score > 0')
+            row = cursor.fetchone()
+            analytics['avg_score'] = round(dict(row)['avg'] or 0, 1) if row else 0
+            
+            # Candidates by job
+            cursor.execute('''
+                SELECT j.title, COUNT(c.id) as count 
+                FROM jobs j 
+                LEFT JOIN candidates c ON j.id = c.job_id 
+                GROUP BY j.id, j.title 
+                ORDER BY count DESC
+            ''')
+            rows = cursor.fetchall()
+            analytics['candidates_by_job'] = [dict(r) for r in rows]
+            
+            # Score distribution
+            cursor.execute('SELECT score FROM candidates WHERE score IS NOT NULL')
+            rows = cursor.fetchall()
+            for row in rows:
+                score = dict(row)['score'] or 0
+                if score <= 20: analytics['score_distribution']['0-20'] += 1
+                elif score <= 40: analytics['score_distribution']['21-40'] += 1
+                elif score <= 60: analytics['score_distribution']['41-60'] += 1
+                elif score <= 80: analytics['score_distribution']['61-80'] += 1
+                else: analytics['score_distribution']['81-100'] += 1
+            
+            # Candidates by status (from raw_data)
+            cursor.execute('SELECT raw_data FROM candidates')
+            rows = cursor.fetchall()
+            status_counts = {'applied': 0, 'interview_scheduled': 0, 'rejected': 0, 'pending': 0}
+            for row in rows:
+                try:
+                    raw = json.loads(dict(row).get('raw_data', '{}'))
+                    status = raw.get('status', 'applied')
+                    if status in ['processed', 'pending']:
+                        status = 'applied'
+                    status_counts[status] = status_counts.get(status, 0) + 1
+                except:
+                    status_counts['applied'] += 1
+            analytics['candidates_by_status'] = status_counts
+            
+            # Applications over time (last 30 days)
+            cursor.execute('''
+                SELECT DATE(timestamp) as date, COUNT(*) as count 
+                FROM candidates 
+                WHERE timestamp IS NOT NULL
+                GROUP BY DATE(timestamp) 
+                ORDER BY date DESC 
+                LIMIT 30
+            ''')
+            rows = cursor.fetchall()
+            analytics['applications_over_time'] = [dict(r) for r in rows][::-1]  # Reverse for chronological
+            
+        except Exception as e:
+            print(f"Error getting analytics: {e}")
+        finally:
+            conn.close()
+        
+        return analytics
+
+    def bulk_update_status(self, candidate_ids: List[str], new_status: str) -> int:
+        """Update status for multiple candidates at once"""
+        if not candidate_ids:
+            return 0
+            
+        updated = 0
+        for cid in candidate_ids:
+            if self.update_status(cid, new_status):
+                updated += 1
+        return updated
