@@ -3,6 +3,15 @@
 let currentCandidates = [];
 let isKanbanView = false;
 let currentJobTitle = null; // Store job title for emails
+let selectedCandidates = new Set(); // Track selected candidates for bulk operations
+
+// XSS Sanitization utility
+function sanitizeHtml(str) {
+    if (!str) return '';
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+}
 
 // Helper function to ensure LinkedIn URL has proper protocol
 function formatLinkedInUrl(url) {
@@ -12,6 +21,189 @@ function formatLinkedInUrl(url) {
         return url;
     }
     return 'https://' + url;
+}
+
+// Show loading spinner
+function showLoading(element, message = 'Loading...') {
+    if (element) {
+        element.innerHTML = `
+            <div style="text-align: center; padding: 3rem; color: var(--text-secondary);">
+                <i class="fas fa-spinner fa-spin" style="font-size: 2rem; margin-bottom: 1rem;"></i>
+                <p>${sanitizeHtml(message)}</p>
+            </div>
+        `;
+    }
+}
+
+// Bulk selection functions
+function toggleCandidateSelection(candidateId, checkbox) {
+    if (checkbox.checked) {
+        selectedCandidates.add(candidateId);
+    } else {
+        selectedCandidates.delete(candidateId);
+    }
+    updateBulkActionsBar();
+}
+
+function toggleSelectAll(checked) {
+    const checkboxes = document.querySelectorAll('.candidate-checkbox');
+    checkboxes.forEach(cb => {
+        cb.checked = checked;
+        const candidateId = cb.dataset.candidateId;
+        if (checked) {
+            selectedCandidates.add(candidateId);
+        } else {
+            selectedCandidates.delete(candidateId);
+        }
+    });
+    updateBulkActionsBar();
+}
+
+function updateBulkActionsBar() {
+    const bar = document.getElementById('bulk-actions-bar');
+    const count = document.getElementById('selected-count');
+    if (bar && count) {
+        if (selectedCandidates.size > 0) {
+            bar.style.display = 'flex';
+            count.textContent = selectedCandidates.size;
+        } else {
+            bar.style.display = 'none';
+        }
+    }
+}
+
+async function bulkReject() {
+    if (selectedCandidates.size === 0) return;
+    
+    if (!confirm(`Are you sure you want to reject ${selectedCandidates.size} candidate(s)? Rejection emails will be sent.`)) {
+        return;
+    }
+    
+    const btn = document.getElementById('bulk-reject-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Rejecting...';
+    
+    try {
+        const response = await fetch('/api/bulk/reject', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                candidate_ids: Array.from(selectedCandidates),
+                send_email: true,
+                job_title: currentJobTitle
+            })
+        });
+        
+        const data = await response.json();
+        if (data.success) {
+            alert(`Successfully rejected ${data.updated} candidate(s)`);
+            selectedCandidates.clear();
+            loadCandidates();
+        } else {
+            alert('Error: ' + data.error);
+        }
+    } catch (error) {
+        console.error('Bulk reject error:', error);
+        alert('Failed to reject candidates');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-times"></i> Reject Selected';
+    }
+}
+
+async function bulkDelete() {
+    if (selectedCandidates.size === 0) return;
+    
+    if (!confirm(`Are you sure you want to DELETE ${selectedCandidates.size} candidate(s)? This cannot be undone.`)) {
+        return;
+    }
+    
+    const btn = document.getElementById('bulk-delete-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Deleting...';
+    
+    try {
+        const response = await fetch('/api/bulk/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ candidate_ids: Array.from(selectedCandidates) })
+        });
+        
+        const data = await response.json();
+        if (data.success) {
+            alert(`Successfully deleted ${data.deleted} candidate(s)`);
+            selectedCandidates.clear();
+            loadCandidates();
+        } else {
+            alert('Error: ' + data.error);
+        }
+    } catch (error) {
+        console.error('Bulk delete error:', error);
+        alert('Failed to delete candidates');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-trash"></i> Delete Selected';
+    }
+}
+
+async function exportCSV() {
+    const jobId = getJobIdFromUrl();
+    window.open(`/api/export/candidates?job_id=${jobId}`, '_blank');
+}
+
+// Resume preview modal
+function openResumePreview(fileUrl, candidateName) {
+    // Check if it's a Google Drive link
+    let previewUrl = fileUrl;
+    if (fileUrl.includes('drive.google.com') && fileUrl.includes('/d/')) {
+        // Convert to preview URL
+        const fileId = fileUrl.match(/\/d\/([^\/]+)/)?.[1];
+        if (fileId) {
+            previewUrl = `https://drive.google.com/file/d/${fileId}/preview`;
+        }
+    }
+    
+    const modal = document.createElement('div');
+    modal.id = 'resume-preview-modal';
+    modal.className = 'modal active';
+    modal.style.cssText = 'display: flex; position: fixed; z-index: 2000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); backdrop-filter: blur(4px); justify-content: center; align-items: center;';
+    
+    modal.innerHTML = `
+        <div style="width: 90%; max-width: 1000px; height: 90%; background: var(--card-bg); border-radius: 12px; display: flex; flex-direction: column; border: 1px solid var(--border-color);">
+            <div style="padding: 1rem 1.5rem; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;">
+                <h3 style="margin: 0; color: var(--text-primary);">
+                    <i class="fas fa-file-pdf" style="margin-right: 10px; color: #e74c3c;"></i>
+                    Resume: ${sanitizeHtml(candidateName)}
+                </h3>
+                <div style="display: flex; gap: 10px;">
+                    <a href="${fileUrl}" target="_blank" class="btn btn-sm btn-secondary">
+                        <i class="fas fa-external-link-alt"></i> Open in New Tab
+                    </a>
+                    <button onclick="this.closest('.modal').remove()" class="btn btn-sm btn-outline" style="color: var(--text-secondary);">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            </div>
+            <div style="flex: 1; padding: 0; overflow: hidden;">
+                <iframe src="${previewUrl}" style="width: 100%; height: 100%; border: none;"></iframe>
+            </div>
+        </div>
+    `;
+    
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) modal.remove();
+    });
+    
+    document.body.appendChild(modal);
+}
+
+// Close the HTML-based resume preview modal
+function closeResumePreview() {
+    const modal = document.getElementById('resume-preview-modal');
+    if (modal) {
+        modal.style.display = 'none';
+        document.getElementById('resume-preview-iframe').src = '';
+    }
 }
 
 // DOM Elements
@@ -456,19 +648,43 @@ function displayResults(candidates) {
         card.style.cursor = 'pointer';
         
         card.addEventListener('click', (e) => {
-            if (e.target.closest('a') || e.target.closest('button')) return;
+            if (e.target.closest('a') || e.target.closest('button') || e.target.closest('input[type="checkbox"]')) return;
             openCandidateModal(candidate);
         });
         
+        // Build LinkedIn link if available
+        const linkedinUrl = candidate.linkedin_url ? formatLinkedInUrl(candidate.linkedin_url) : null;
+        const linkedinHtml = linkedinUrl ? `
+            <a href="${linkedinUrl}" target="_blank" onclick="event.stopPropagation()" 
+               style="color: #0077b5; text-decoration: none; font-size: 0.85rem; display: inline-flex; align-items: center; gap: 4px;">
+                <i class="fab fa-linkedin"></i> LinkedIn
+            </a>` : '';
+        
+        // Resume preview button
+        const resumePreviewHtml = candidate.file_url ? `
+            <button onclick="event.stopPropagation(); openResumePreview('${candidate.file_url}', '${sanitizeHtml((candidate.candidate_name || candidate.name || 'Candidate').replace(/'/g, "\\'"))}')" 
+                    class="btn btn-sm" style="font-size: 0.75rem; padding: 0.2rem 0.5rem; background: rgba(0,113,227,0.1); color: var(--primary-color); border: none; border-radius: 4px; cursor: pointer;">
+                <i class="fas fa-eye"></i> Preview Resume
+            </button>` : '';
+        
         card.innerHTML = `
             <div class="candidate-header">
-                <div>
-                    <h4>#${index + 1} ${candidate.candidate_name || candidate.name || 'Unknown Candidate'}</h4>
-                    <div style="font-size: 0.9rem; color: var(--text-secondary); margin-top: 5px;">
-                        <i class="fas fa-envelope"></i> ${candidate.candidate_email || candidate.email || 'N/A'}
-                    </div>
-                    <div style="font-size: 0.9rem; color: var(--text-secondary); margin-top: 2px;">
-                        <i class="fas fa-phone"></i> ${candidate.candidate_phone || candidate.phone || 'N/A'}
+                <div style="display: flex; align-items: flex-start; gap: 12px;">
+                    <input type="checkbox" class="candidate-checkbox" data-candidate-id="${candidate.id}" 
+                           onclick="event.stopPropagation(); toggleCandidateSelection('${candidate.id}', this)"
+                           style="width: 18px; height: 18px; cursor: pointer; margin-top: 4px; accent-color: var(--primary-color);">
+                    <div>
+                        <h4 style="margin: 0;">#${index + 1} ${sanitizeHtml(candidate.candidate_name || candidate.name || 'Unknown Candidate')}</h4>
+                        <div style="font-size: 0.9rem; color: #c8c8cd; margin-top: 5px;">
+                            <i class="fas fa-envelope"></i> ${sanitizeHtml(candidate.candidate_email || candidate.email || 'N/A')}
+                        </div>
+                        <div style="font-size: 0.9rem; color: #c8c8cd; margin-top: 2px;">
+                            <i class="fas fa-phone"></i> ${sanitizeHtml(candidate.candidate_phone || candidate.phone || 'N/A')}
+                        </div>
+                        <div style="margin-top: 6px; display: flex; gap: 10px; align-items: center;">
+                            ${linkedinHtml}
+                            ${resumePreviewHtml}
+                        </div>
                     </div>
                 </div>
                 <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 10px;">
@@ -490,8 +706,8 @@ function displayResults(candidates) {
                     <span>${candidate.breakdown?.education || 0}%</span>
                 </div>
             </div>
-            <div class="ai-feedback" style="max-height: 80px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;">
-                <strong>Summary:</strong> ${candidate.ai_analysis?.summary || candidate.feedback || 'No feedback available.'}
+            <div class="ai-feedback" style="max-height: 80px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; color: #d0d0d5;">
+                <strong>Summary:</strong> ${sanitizeHtml(candidate.ai_analysis?.summary || candidate.feedback || 'No feedback available.')}
             </div>
             <div style="margin-top: 10px; text-align: center; color: var(--primary-color); font-size: 0.9rem; font-weight: 500;">
                 Click to view full details
