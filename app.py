@@ -1229,6 +1229,55 @@ def clear_candidates():
     return jsonify({'success': True})
 
 
+@app.route('/api/candidates/check-duplicate', methods=['POST'])
+def check_duplicate_application():
+    """
+    Check if a candidate has already applied to a specific job.
+    A candidate can apply to multiple different jobs, but not to the same job twice.
+    
+    Request body: { "email": "...", "job_id": "..." }
+    """
+    data = request.json
+    email = data.get('email')
+    job_id = data.get('job_id')
+    
+    if not email or not job_id:
+        return jsonify({'error': 'Email and job_id are required'}), 400
+    
+    existing = storage_service.check_duplicate_application(email=email, job_id=job_id)
+    
+    if existing:
+        return jsonify({
+            'is_duplicate': True,
+            'message': 'You have already applied for this position.',
+            'existing_application': {
+                'id': existing.get('id'),
+                'applied_at': existing.get('timestamp'),
+                'score': existing.get('score')
+            }
+        })
+    else:
+        return jsonify({
+            'is_duplicate': False,
+            'message': 'No existing application found. You can apply.'
+        })
+
+
+@app.route('/api/candidates/by-email/<email>', methods=['GET'])
+def get_candidate_applications(email):
+    """
+    Get all jobs a candidate has applied to by their email.
+    A candidate can apply to multiple different jobs.
+    """
+    applications = storage_service.get_candidate_applications(email)
+    
+    return jsonify({
+        'email': email,
+        'total_applications': len(applications),
+        'applications': applications
+    })
+
+
 @app.route('/api/candidates/<candidate_id>/status', methods=['POST'])
 def update_candidate_status(candidate_id):
     """Update candidate status (applied, rejected, interview_scheduled)"""

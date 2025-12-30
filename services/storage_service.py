@@ -153,6 +153,12 @@ class StorageService:
                     cursor.execute("CREATE INDEX IF NOT EXISTS idx_candidates_timestamp ON candidates(timestamp DESC)")
                     cursor.execute("CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status)")
                     cursor.execute("CREATE INDEX IF NOT EXISTS idx_jobs_created_at ON jobs(created_at DESC)")
+                    # Unique constraint: One candidate can only apply once per job (by email)
+                    cursor.execute("""
+                        CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_candidate_per_job 
+                        ON candidates(LOWER(email), job_id) 
+                        WHERE email IS NOT NULL AND email != ''
+                    """)
                 else:
                     cursor.execute("CREATE INDEX IF NOT EXISTS idx_candidates_job_id ON candidates(job_id)")
                     cursor.execute("CREATE INDEX IF NOT EXISTS idx_candidates_email ON candidates(email)")
@@ -160,7 +166,14 @@ class StorageService:
                     cursor.execute("CREATE INDEX IF NOT EXISTS idx_candidates_timestamp ON candidates(timestamp DESC)")
                     cursor.execute("CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status)")
                     cursor.execute("CREATE INDEX IF NOT EXISTS idx_jobs_created_at ON jobs(created_at DESC)")
+                    # Unique constraint: One candidate can only apply once per job (by email)
+                    cursor.execute("""
+                        CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_candidate_per_job 
+                        ON candidates(email, job_id) 
+                        WHERE email IS NOT NULL AND email != ''
+                    """)
                 print("✅ Database indexes created/verified")
+                print("✅ Unique constraint: candidate can apply to multiple jobs, but only once per job")
             except Exception as e:
                 print(f"⚠️ Error creating indexes (non-critical): {e}")
 
@@ -462,10 +475,27 @@ class StorageService:
             return False
 
     def save_candidate(self, candidate_data: Dict) -> Dict:
+        """
+        Save a candidate to the database.
+        
+        Note: A candidate can apply to multiple different jobs, but cannot apply 
+        multiple times to the same job (enforced by email+job_id unique constraint).
+        """
         if 'id' not in candidate_data:
             candidate_data['id'] = f"cand_{int(datetime.now().timestamp())}_{os.urandom(4).hex()}"
         if 'timestamp' not in candidate_data:
             candidate_data['timestamp'] = datetime.now().isoformat()
+        
+        # Pre-check for duplicate application (same email + same job)
+        email = candidate_data.get('email') or candidate_data.get('candidate_email')
+        job_id = candidate_data.get('job_id')
+        
+        if email and job_id:
+            existing = self.check_duplicate_application(email=email, job_id=job_id)
+            if existing:
+                print(f"⚠️ Duplicate blocked: {email} already applied to job {job_id}")
+                # Return the existing candidate data instead
+                return existing
             
         conn = self._get_connection()
         cursor = conn.cursor()
@@ -478,7 +508,7 @@ class StorageService:
             candidate_data['id'],
             candidate_data.get('job_id'),
             candidate_data.get('name') or candidate_data.get('candidate_name'),
-            candidate_data.get('email') or candidate_data.get('candidate_email'),
+            email,
             candidate_data.get('phone') or candidate_data.get('candidate_phone'),
             candidate_data.get('resume_url') or candidate_data.get('file_url'),
             candidate_data.get('linkedin_url', ''),
@@ -717,6 +747,46 @@ class StorageService:
             print(f"Error getting duplicate stats: {e}")
             conn.close()
             return {'duplicate_emails': [], 'total_duplicates': 0}
+
+    def get_candidate_applications(self, email: str) -> List[Dict]:
+        """
+        Get all jobs a candidate has applied to by their email.
+        A candidate can apply to multiple different jobs.
+        Returns list of applications with job details.
+        """
+        if not email:
+            return []
+            
+        conn = self._get_connection()
+        
+        try:
+            if self.is_postgres:
+                cursor = conn.cursor(cursor_factory=RealDictCursor)
+                cursor.execute('''
+                    SELECT c.*, j.title as job_title, j.status as job_status
+                    FROM candidates c
+                    LEFT JOIN jobs j ON c.job_id = j.id
+                    WHERE LOWER(c.email) = LOWER(%s)
+                    ORDER BY c.timestamp DESC
+                ''', (email,))
+            else:
+                cursor = conn.cursor()
+                cursor.execute('''
+                    SELECT c.*, j.title as job_title, j.status as job_status
+                    FROM candidates c
+                    LEFT JOIN jobs j ON c.job_id = j.id
+                    WHERE LOWER(c.email) = LOWER(?)
+                    ORDER BY c.timestamp DESC
+                ''', (email,))
+            
+            rows = cursor.fetchall()
+            conn.close()
+            return [dict(row) for row in rows]
+            
+        except Exception as e:
+            print(f"Error getting candidate applications: {e}")
+            conn.close()
+            return []
 
     def clear_candidates(self):
         conn = self._get_connection()
