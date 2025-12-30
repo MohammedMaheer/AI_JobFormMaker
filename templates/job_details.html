@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Job Details - Acceleration Robotics</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=2">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/gas-styles.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/kanban.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* Reuse styles from ranking.html */
+        .ranking-results { margin-top: 2rem; }
+        .candidate-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 0.5rem;
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+            transition: all 0.2s;
+        }
+        .candidate-card:hover {
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.2);
+            border-color: var(--primary-color);
+        }
+        .score-badge {
+            background: var(--info-color);
+            color: white;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-weight: 600;
+            font-size: 0.875rem;
+        }
+        .score-high { background-color: var(--success-color); }
+        .score-medium { background-color: var(--warning-color); }
+        .score-low { background-color: var(--danger-color); }
+        
+        .candidate-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+        .candidate-header h4 { color: var(--text-primary); }
+        .candidate-details {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+        .detail-item label {
+            display: block;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            margin-bottom: 0.25rem;
+        }
+        .detail-item span { font-weight: 500; color: var(--text-primary); }
+        .ai-feedback {
+            background: var(--dark-color);
+            padding: 1rem;
+            border-radius: 0.375rem;
+            font-size: 0.875rem;
+            color: #d0d0d5;
+            border: 1px solid var(--border-color);
+        }
+        .file-list {
+            margin-top: 0.5rem;
+            font-size: 0.875rem;
+            color: #c8c8cd;
+        }
+        /* Collapsible Job Description */
+        .job-info-desc.collapsed {
+            max-height: 100px;
+            overflow: hidden;
+            position: relative;
+        }
+        .job-info-desc.collapsed::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 50px;
+            background: linear-gradient(transparent, var(--card-bg));
+        }
+        .job-info-desc.expanded {
+            max-height: none;
+        }
+        .job-info-desc.expanded::after {
+            display: none;
+        }
+        /* Modal Styles */
+        .modal {
+            display: none; 
+            position: fixed; 
+            z-index: 1000; 
+            left: 0;
+            top: 0;
+            width: 100%; 
+            height: 100%; 
+            overflow: auto; 
+            background-color: rgba(0,0,0,0.5); 
+            backdrop-filter: blur(4px);
+        }
+        .modal-content {
+            background-color: var(--card-bg);
+            margin: 5% auto; 
+            padding: 2rem;
+            border: 1px solid var(--border-color);
+            border-radius: 0.5rem;
+            width: 90%;
+            max-width: 900px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+        .close {
+            color: var(--text-secondary);
+            float: right;
+            font-size: 1.5rem;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .close:hover, .close:focus { color: var(--text-primary); text-decoration: none; cursor: pointer; }
+        .form-group { margin-bottom: 1rem; }
+        .form-group label { display: block; margin-bottom: 0.5rem; color: var(--text-primary); font-weight: 500; }
+        .form-control {
+            width: 100%;
+            padding: 0.5rem;
+            border: 1px solid var(--border-color);
+            border-radius: 0.25rem;
+            background-color: #1e293b;
+            color: #f8fafc;
+        }
+        .form-control option {
+            background-color: #1e293b;
+            color: #f8fafc;
+        }
+        .form-actions { display: flex; gap: 1rem; margin-top: 1.5rem; }
+        
+        .job-info-card {
+            background: var(--card-bg);
+            padding: 1.5rem;
+            border-radius: 8px;
+            margin-bottom: 2rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            border: 1px solid var(--border-color);
+        }
+        .job-info-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 1rem;
+        }
+        .job-info-title { font-size: 1.5rem; font-weight: 700; color: #f5f5f7; }
+        .job-info-meta { color: #b0b0b5; font-size: 0.9rem; }
+        .job-info-desc { color: #e0e0e5; line-height: 1.6; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="logo">
+                <img src="data:image/png;base64,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" alt="Acceleration Robotics" class="company-logo">
+                <h1 class="text-gradient">Job Dashboard</h1>
+            </div>
+            <nav>
+                <a href="/" class="btn btn-secondary">Back to Dashboard</a>
+            </nav>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Job Info -->
+            <section class="job-info-card" id="job-info-section">
+                <div class="job-info-header">
+                    <h2 class="job-info-title" id="job-title">Loading Job...</h2>
+                    <div class="job-info-meta" id="job-meta"></div>
+                </div>
+                <div class="job-info-desc collapsed" id="job-description"></div>
+                <button class="btn btn-sm btn-outline" id="toggle-desc-btn" style="margin-top: 0.75rem;">
+                    <i class="fas fa-chevron-down"></i> View Full Description
+                </button>
+                <div class="job-actions" style="margin-top: 1.5rem; display: flex; gap: 10px; flex-wrap: wrap;">
+                    <a href="#" id="form-link" target="_blank" class="btn btn-outline btn-sm" style="display: none;">
+                        <i class="fab fa-google"></i> View Live Form
+                    </a>
+                    <a href="#" id="edit-form-link" target="_blank" class="btn btn-outline btn-sm" style="display: none;">
+                        <i class="fas fa-edit"></i> Manage Form
+                    </a>
+                    <button id="close-job-btn" class="btn btn-outline-danger btn-sm" style="display: none;">
+                        <i class="fas fa-ban"></i> Close Job
+                    </button>
+                    <button id="delete-job-btn" class="btn btn-outline-danger btn-sm" style="display: none;">
+                        <i class="fas fa-trash"></i> Delete Job
+                    </button>
+                </div>
+            </section>
+
+            <!-- Dashboard Controls -->
+            <section class="card" style="margin-bottom: 2rem;">
+                <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+                    <h2>Candidates</h2>
+                    <div class="header-actions">
+                        <button onclick="exportCSV()" class="btn btn-secondary" style="margin-right: 10px;">
+                            <i class="fas fa-download"></i> Export CSV
+                        </button>
+                        <button id="view-toggle-btn" class="btn btn-secondary" style="margin-right: 10px;">
+                            <i class="fas fa-columns"></i> Kanban View
+                        </button>
+                        <button id="refresh-btn" class="btn btn-primary">
+                            <i class="fas fa-sync-alt"></i> Refresh Candidates
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Bulk Actions Bar (hidden by default) -->
+                <div id="bulk-actions-bar" style="display: none; padding: 0.75rem 1rem; background: rgba(0, 113, 227, 0.1); border-top: 1px solid var(--primary-color); align-items: center; gap: 1rem; flex-wrap: wrap;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <input type="checkbox" id="select-all-checkbox" onchange="toggleSelectAll(this.checked)" style="width: 18px; height: 18px; accent-color: var(--primary-color);">
+                        <label for="select-all-checkbox" style="color: var(--text-primary); cursor: pointer;">Select All</label>
+                    </div>
+                    <span style="color: var(--primary-color); font-weight: 600;"><span id="selected-count">0</span> selected</span>
+                    <div style="display: flex; gap: 8px; margin-left: auto;">
+                        <button id="bulk-reject-btn" onclick="bulkReject()" class="btn btn-sm" style="background: rgba(231, 76, 60, 0.2); color: #e74c3c; border: 1px solid #e74c3c;">
+                            <i class="fas fa-times"></i> Reject Selected
+                        </button>
+                        <button id="bulk-delete-btn" onclick="bulkDelete()" class="btn btn-sm" style="background: rgba(231, 76, 60, 0.1); color: #e74c3c; border: 1px solid rgba(231, 76, 60, 0.5);">
+                            <i class="fas fa-trash"></i> Delete Selected
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Search & Filter Bar -->
+                <div class="filter-bar" style="padding: 1rem; border-top: 1px solid var(--border-color); display: flex; flex-wrap: wrap; gap: 1rem; align-items: center;">
+                    <div class="filter-group" style="flex: 1; min-width: 200px;">
+                        <input type="text" id="search-input" class="form-control" placeholder="🔍 Search by name, email, or skills..." style="width: 100%;">
+                    </div>
+                    <div class="filter-group" style="display: flex; gap: 0.5rem; align-items: center;">
+                        <label style="color: var(--text-secondary); white-space: nowrap;">Score:</label>
+                        <input type="number" id="score-min" class="form-control" placeholder="Min" min="0" max="100" style="width: 70px;">
+                        <span style="color: var(--text-secondary);">-</span>
+                        <input type="number" id="score-max" class="form-control" placeholder="Max" min="0" max="100" style="width: 70px;">
+                    </div>
+                    <div class="filter-group">
+                        <select id="status-filter" class="form-control" style="min-width: 130px;">
+                            <option value="">All Status</option>
+                            <option value="applied">Applied</option>
+                            <option value="interview_scheduled">Interview</option>
+                            <option value="rejected">Rejected</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <select id="tag-filter" class="form-control" style="min-width: 120px;">
+                            <option value="">All Tags</option>
+                        </select>
+                    </div>
+                    <button id="clear-filters-btn" class="btn btn-outline btn-sm" style="white-space: nowrap;">
+                        <i class="fas fa-times"></i> Clear
+                    </button>
+                </div>
+            </section>
+
+            <!-- Kanban Board Section -->
+            <section id="kanban-section" style="display: none; overflow-x: auto; padding-bottom: 20px;">
+                <div class="kanban-board">
+                    <!-- Column 1: Applied -->
+                    <div class="kanban-column" id="col-applied" ondrop="drop(event, 'applied')" ondragover="allowDrop(event)">
+                        <div class="kanban-header header-applied">
+                            <h3><i class="fas fa-inbox"></i> Applied</h3>
+                            <span class="count-badge" id="count-applied">0</span>
+                        </div>
+                        <div class="kanban-items" id="list-applied"></div>
+                    </div>
+
+                    <!-- Column 2: Interview Scheduled -->
+                    <div class="kanban-column" id="col-interview" ondrop="drop(event, 'interview_scheduled')" ondragover="allowDrop(event)">
+                        <div class="kanban-header header-interview">
+                            <h3><i class="far fa-calendar-check"></i> Interview Scheduled</h3>
+                            <span class="count-badge" id="count-interview">0</span>
+                        </div>
+                        <div class="kanban-items" id="list-interview"></div>
+                    </div>
+
+                    <!-- Column 3: Rejected -->
+                    <div class="kanban-column" id="col-rejected" ondrop="drop(event, 'rejected')" ondragover="allowDrop(event)">
+                        <div class="kanban-header header-rejected">
+                            <h3><i class="fas fa-times-circle"></i> Rejected</h3>
+                            <span class="count-badge" id="count-rejected">0</span>
+                        </div>
+                        <div class="kanban-items" id="list-rejected"></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Results Section (List View) -->
+            <section class="ranking-results" id="results-section">
+                <div id="candidates-list"></div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Candidate Details Modal -->
+    <div class="modal" id="candidate-modal">
+        <div class="modal-content modal-lg">
+            <div class="modal-header">
+                <h3 id="modal-candidate-name">Candidate Details</h3>
+                <button class="modal-close" id="close-candidate-modal">&times;</button>
+            </div>
+            <div class="modal-body" id="modal-candidate-body"></div>
+        </div>
+    </div>
+
+    <!-- Interview Schedule Modal -->
+    <div id="scheduleModal" class="modal">
+      <div class="modal-content">
+        <span class="close">&times;</span>
+        <h2 style="margin-bottom: 1.5rem; color: var(--text-primary);">Schedule Interview</h2>
+        <form id="scheduleForm">
+            <input type="hidden" id="candidateName">
+            <input type="hidden" id="candidateEmail">
+            <input type="hidden" id="candidateId">
+            
+            <div class="form-group">
+                <label for="interviewTitle">Event Title</label>
+                <input type="text" id="interviewTitle" class="form-control" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="interviewDate">Date & Time</label>
+                <input type="datetime-local" id="interviewDate" class="form-control" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="interviewDuration">Duration</label>
+                <select id="interviewDuration" class="form-control">
+                    <option value="30">30 Minutes</option>
+                    <option value="45">45 Minutes</option>
+                    <option value="60" selected>1 Hour</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="interviewType">Type</label>
+                <select id="interviewType" class="form-control">
+                    <option value="Google Meet">Google Meet</option>
+                    <option value="Zoom">Zoom</option>
+                    <option value="Phone">Phone Call</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="meetingLink">Meeting Link (Optional)</label>
+                <input type="text" id="meetingLink" class="form-control" placeholder="e.g. https://meet.google.com/abc-defg-hij">
+                <small style="color: #666;">Leave empty to let them know a link will be provided later.</small>
+            </div>
+            
+            <div class="form-actions">
+                <button type="button" id="generateGCal" class="btn btn-primary" style="flex: 1;">
+                    <i class="fas fa-paper-plane"></i> Send Interview Invite
+                </button>
+                <button type="button" id="copyLink" class="btn btn-secondary" style="flex: 1;">
+                    <i class="fas fa-copy"></i> Copy Link
+                </button>
+            </div>
+            
+            <div style="margin-top: 1rem; border-top: 1px solid #eee; padding-top: 1rem;">
+                 <button type="button" id="rejectCandidateBtn" class="btn btn-danger" style="width: 100%;">
+                    <i class="fas fa-times-circle"></i> Reject Candidate
+                </button>
+            </div>
+        </form>
+      </div>
+    </div>
+    
+    <!-- Resume Preview Modal -->
+    <div id="resume-preview-modal" class="modal-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 2000; justify-content: center; align-items: center;">
+        <div class="modal-container" style="width: 90%; max-width: 900px; height: 85vh; background: var(--card-bg); border-radius: 12px; display: flex; flex-direction: column; overflow: hidden;">
+            <div class="modal-header" style="padding: 1rem 1.5rem; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;">
+                <h3 id="resume-preview-title" style="color: var(--text-primary); margin: 0;">Resume Preview</h3>
+                <div style="display: flex; gap: 10px; align-items: center;">
+                    <a id="resume-download-link" href="#" target="_blank" class="btn btn-secondary btn-sm" style="text-decoration: none;">
+                        <i class="fas fa-external-link-alt"></i> Open in New Tab
+                    </a>
+                    <button onclick="closeResumePreview()" class="btn btn-sm" style="background: transparent; color: var(--text-secondary); font-size: 1.5rem; padding: 0.25rem 0.5rem;">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="modal-body" style="flex: 1; padding: 0; overflow: hidden;">
+                <iframe id="resume-preview-iframe" src="" style="width: 100%; height: 100%; border: none; background: white;"></iframe>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const JOB_ID = "{{ job_id }}";
+    </script>
+    <!-- Reuse the logic from ranking.html but adapted -->
+    <script src="{{ url_for('static', filename='js/job_details.js') }}"></script>
+</body>
+</html>

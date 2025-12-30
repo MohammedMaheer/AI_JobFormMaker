@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Interview Question Generator</title>
+    <title>Recruitment Tool</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/gas-styles.css') }}">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -15,9 +15,12 @@
         <header class="header">
             <div class="logo">
                 <img src="data:image/png;base64,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" alt="Acceleration Robotics" class="company-logo">
-                <h1>AI Interview Generator</h1>
+                <h1 class="animate-3d">ACCELERATION ROBOTICS RECRUITMENT TOOL</h1>
             </div>
-            <p class="tagline">Transform job descriptions into professional interview questions</p>
+            <nav>
+                <a href="/ranking" class="btn btn-secondary">Go to Candidate Ranking</a>
+            </nav>
+            <p class="tagline">AI-Assisted Recruitment Platform for Acceleration Robotics</p>
         </header>
 
         <!-- Main Content -->
@@ -262,6 +265,46 @@
                             <i class="fas fa-plus"></i> Create New Questions
                         </button>
                     </div>
+                    
+                    <!-- Candidate Scoring Section -->
+                    <div class="candidate-scoring-section">
+                        <h3><i class="fas fa-users"></i> Candidate Scoring & Ranking</h3>
+                        <p class="scoring-info">Upload candidate resumes to automatically score and rank them against job requirements</p>
+                        
+                        <div class="tip-box" style="margin-bottom: 1.5rem; font-size: 0.9rem;">
+                            <i class="fas fa-bolt"></i>
+                            <div>
+                                <strong>Automate with Webhooks:</strong>
+                                <p>Send Google Forms responses to: <code id="webhook-url-display">/api/webhook/application</code></p>
+                            </div>
+                        </div>
+                        
+                        <div class="candidate-upload-area" id="candidate-upload-area">
+                            <i class="fas fa-user-plus"></i>
+                            <p>Click or drag to upload candidate resumes</p>
+                            <small>Supports PDF, DOCX, TXT | Multiple files allowed</small>
+                            <input type="file" id="candidate-file-input" accept=".pdf,.docx,.txt" multiple style="display: none;">
+                        </div>
+                        
+                        <div class="candidate-actions" style="margin-top: 1rem; text-align: center;">
+                             <button class="btn btn-secondary" id="fetch-candidates-btn">
+                                <i class="fas fa-sync"></i> Fetch Applications from Webhook
+                            </button>
+                        </div>
+                        
+                        <div class="candidates-list" id="candidates-list" style="display: none;">
+                            <h4>Uploaded Candidates (<span id="candidate-count">0</span>)</h4>
+                            <div id="candidates-container"></div>
+                            <button class="btn btn-primary" id="score-all-btn">
+                                <i class="fas fa-calculator"></i> Score All Candidates
+                            </button>
+                        </div>
+                        
+                        <div class="candidates-results" id="candidates-results" style="display: none;">
+                            <h4><i class="fas fa-trophy"></i> Candidate Rankings</h4>
+                            <div id="ranked-candidates-container"></div>
+                        </div>
+                    </div>
                 </div>
             </section>
 
@@ -283,7 +326,7 @@
 
         <!-- Footer -->
         <footer class="footer">
-            <p>Powered by Perplexity AI | 
+            <p> 
                <a href="#" id="help-link">How to use</a> | 
                <a href="#" id="zapier-setup-link">Zapier Setup Guide</a>
             </p>
@@ -500,11 +543,62 @@
                             <p>Delete any existing code and paste this script:</p>
                             <div class="code-block-wrapper">
                                 <button class="copy-btn" id="copy-gas-code">Copy Code</button>
-                                <pre><code id="gas-code">function doPost(e) {
+                                <pre><code id="gas-code">/**
+ * MASTER JOB APPLICATION SCRIPT
+ * 
+ * Features:
+ * 1. Saves generated questions to this Google Sheet.
+ * 2. Creates Google Forms for Job Applications automatically.
+ * 3. Automatically sends Form responses back to your App (Candidate Scoring).
+ * 
+ * SETUP:
+ * 1. Update the WEBHOOK_URL below to your App's URL (e.g. Ngrok or Render).
+ * 2. Deploy as Web App:
+ *    - Click "Deploy" > "New deployment"
+ *    - Select "Web app"
+ *    - Execute as: "Me"
+ *    - Who has access: "Anyone"
+ *    - Click "Deploy" and copy the URL.
+ */
+
+// ================= CONFIGURATION =================
+// Replace with your Python App's URL (Ngrok or Render)
+// Ensure it ends with /api/webhook/application
+var WEBHOOK_URL = "https://patriarchical-conrad-overconservatively.ngrok-free.dev/api/webhook/application";
+// =================================================
+
+/**
+ * MANUAL SETUP TRIGGER
+ * Run this function if you are pasting this script directly into a Google Form.
+ * It will link the form to the 'onFormSubmit' function.
+ */
+function setupTrigger() {
+  // 1. Force Authorization for DriveApp (needed to make resumes public)
+  // This line ensures Google asks for Drive permissions when you run this function.
+  try {
+    var _forceAuth = DriveApp.getRootFolder(); 
+  } catch (e) {
+    // Ignore error, we just want to trigger the auth scope
+  }
+
+  try {
+    var form = FormApp.getActiveForm();
+    ScriptApp.newTrigger('onFormSubmit')
+      .forForm(form)
+      .onFormSubmit()
+      .create();
+    Logger.log("Trigger set up successfully! You can now close this tab.");
+  } catch (e) {
+    Logger.log("Error: " + e.toString());
+    Logger.log("If you are running this from a Spreadsheet, this error is expected. Use the Web App deployment instead.");
+  }
+}
+
+function doPost(e) {
   try {
     var data = JSON.parse(e.postData.contents);
     
-    // Check if this is a form creation request
+    // Check action type
     if (data.action === 'create_application_form') {
       return createForm(data);
     } else {
@@ -519,37 +613,76 @@
 }
 
 function createForm(data) {
-  // Create a new Google Form
-  var form = FormApp.create(data.form_title);
-  form.setDescription('Job Application for ' + data.job_title + (data.company_name ? ' at ' + data.company_name : ''));
-  
-  // Add Standard Fields
-  if (data.standard_fields) {
-    data.standard_fields.forEach(function(field) {
-      var item = form.addTextItem();
-      item.setTitle(field.field);
-      if (field.required) item.setRequired(true);
-    });
+  try {
+    // 1. Create the Form
+    var form = FormApp.create(data.form_title);
+    form.setDescription('Job Application for ' + data.job_title + (data.company_name ? ' at ' + data.company_name : ''));
+    form.setCollectEmail(true); // Automatically collect email
+    
+    // 2. Add Standard Fields
+    if (data.standard_fields) {
+      data.standard_fields.forEach(function(field) {
+        var item;
+        
+        if (field.type === 'date') {
+          item = form.addDateItem();
+        }
+        else if (field.type === 'file') {
+           item = form.addFileUploadItem();
+        }
+        else if (field.type === 'text' || field.type === 'email' || field.type === 'url' || field.type === 'phone') {
+          item = form.addTextItem();
+        } 
+        else if (field.type === 'number') {
+          item = form.addTextItem();
+          var textValidation = FormApp.createTextValidation()
+            .setHelpText('Must be a number')
+            .requireNumber()
+            .build();
+          item.setValidation(textValidation);
+        } 
+        else {
+          item = form.addTextItem();
+        }
+        
+        item.setTitle(field.field);
+        if (field.required) item.setRequired(true);
+      });
+    }
+    
+    // 3. Add Interview Questions
+    form.addPageBreakItem().setTitle('Interview Questions');
+    
+    if (data.interview_questions) {
+      data.interview_questions.forEach(function(q) {
+        form.addParagraphTextItem()
+          .setTitle(q.question)
+          .setHelpText('Category: ' + q.category)
+          .setRequired(true);
+      });
+    }
+    
+    // 4. Set up the Trigger for Automation
+    // This links the new form to the 'onFormSubmit' function in THIS script
+    ScriptApp.newTrigger('onFormSubmit')
+      .forForm(form)
+      .onFormSubmit()
+      .create();
+      
+    // 5. Return the URLs
+    return ContentService.createTextOutput(JSON.stringify({
+      "status": "success",
+      "formUrl": form.getPublishedUrl(),
+      "editUrl": form.getEditUrl(),
+      "message": "Form created and automation trigger linked!"
+    })).setMimeType(ContentService.MimeType.JSON);
+    
+  } catch (e) {
+    return ContentService.createTextOutput(JSON.stringify({
+      "status": "error",
+      "message": e.toString()
+    })).setMimeType(ContentService.MimeType.JSON);
   }
-  
-  // Add Interview Questions Section
-  form.addPageBreakItem().setTitle('Interview Questions');
-  
-  if (data.interview_questions) {
-    data.interview_questions.forEach(function(q) {
-      form.addParagraphTextItem()
-        .setTitle(q.question)
-        .setHelpText('Category: ' + q.category)
-        .setRequired(true);
-    });
-  }
-  
-  // Return the form URL
-  return ContentService.createTextOutput(JSON.stringify({
-    "status": "success",
-    "formUrl": form.getPublishedUrl(),
-    "editUrl": form.getEditUrl()
-  })).setMimeType(ContentService.MimeType.JSON);
 }
 
 function saveToSheet(data) {
@@ -574,6 +707,139 @@ function saveToSheet(data) {
   
   return ContentService.createTextOutput(JSON.stringify({"status": "success"}))
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+/**
+ * Triggered when a candidate submits the form.
+ * Sends data to your Python Backend.
+ */
+function onFormSubmit(e) {
+  try {
+    var formResponse = e.response;
+    var itemResponses = formResponse.getItemResponses();
+    var email = formResponse.getRespondentEmail();
+    
+    // Attempt to get Form Description (Job Description)
+    var jobDescription = "Job Application";
+    try {
+      var form = FormApp.openById(formResponse.getFormId());
+      jobDescription = form.getDescription() || form.getTitle();
+    } catch (err) {
+      Logger.log("Could not get form description: " + err);
+    }
+    
+    var payload = {
+      "name": "Unknown Candidate",
+      "email": email || "",
+      "phone": "",
+      "resume_url": "",
+      "job_description": jobDescription,
+      "answers": {}
+    };
+
+    // Intelligent Field Detection
+    // We use a scoring system to identify fields even if admins rename them
+    var bestMatches = {
+      name: { score: 0, value: "" },
+      phone: { score: 0, value: "" },
+      resume: { score: 0, value: "" }
+    };
+
+    // Loop through responses
+    for (var i = 0; i < itemResponses.length; i++) {
+      var itemResponse = itemResponses[i];
+      var item = itemResponse.getItem();
+      var title = item.getTitle();
+      var type = item.getType();
+      var answer = itemResponse.getResponse();
+      var titleLower = title.toLowerCase();
+      
+      // Always add to answers for context
+      payload.answers[title] = answer;
+
+      // --- 1. Detect Name ---
+      var nameScore = 0;
+      if (titleLower.includes("full name")) nameScore += 10;
+      else if (titleLower.includes("candidate name")) nameScore += 10;
+      else if (titleLower.includes("your name")) nameScore += 8;
+      else if (titleLower === "name") nameScore += 5;
+      else if (titleLower.includes("name")) nameScore += 2;
+      
+      // Negative weights for name to avoid false positives
+      if (titleLower.includes("company")) nameScore -= 10;
+      if (titleLower.includes("reference")) nameScore -= 10;
+      if (titleLower.includes("manager")) nameScore -= 10;
+      if (titleLower.includes("file")) nameScore -= 10;
+      
+      if (nameScore > bestMatches.name.score) {
+        bestMatches.name = { score: nameScore, value: answer };
+      }
+
+      // --- 2. Detect Email (if not auto-collected) ---
+      if (!payload.email && (titleLower.includes("email"))) {
+        payload.email = answer;
+      }
+
+      // --- 3. Detect Phone ---
+      var phoneScore = 0;
+      if (titleLower.includes("phone")) phoneScore += 10;
+      if (titleLower.includes("mobile")) phoneScore += 10;
+      if (titleLower.includes("cell")) phoneScore += 10;
+      if (titleLower.includes("contact number")) phoneScore += 8;
+      
+      if (phoneScore > bestMatches.phone.score) {
+        bestMatches.phone = { score: phoneScore, value: answer };
+      }
+
+      // --- 4. Detect Resume ---
+      var resumeScore = 0;
+      if (type === FormApp.ItemType.FILE_UPLOAD) resumeScore += 20; // Strongest signal
+      if (titleLower.includes("resume")) resumeScore += 10;
+      if (titleLower.includes("cv")) resumeScore += 10;
+      if (titleLower.includes("curriculum vitae")) resumeScore += 10;
+      if (titleLower.includes("upload")) resumeScore += 5;
+      if (titleLower.includes("attach")) resumeScore += 5;
+      
+      if (resumeScore > bestMatches.resume.score) {
+        // Handle File Upload vs Text URL
+        var resumeValue = "";
+        if (type === FormApp.ItemType.FILE_UPLOAD && Array.isArray(answer) && answer.length > 0) {
+           var fileId = answer[0];
+           try {
+             var file = DriveApp.getFileById(fileId);
+             file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+             resumeValue = "https://drive.google.com/uc?export=download&id=" + fileId;
+             Logger.log("Made file public: " + fileId);
+           } catch (e) {
+             Logger.log("Error sharing file: " + e);
+             resumeValue = "https://drive.google.com/open?id=" + fileId; // Fallback
+           }
+        } else {
+           resumeValue = answer;
+        }
+        
+        bestMatches.resume = { score: resumeScore, value: resumeValue };
+      }
+    }
+
+    // Assign best matches to payload
+    if (bestMatches.name.score > 0) payload.name = bestMatches.name.value;
+    if (bestMatches.phone.score > 0) payload.phone = bestMatches.phone.value;
+    if (bestMatches.resume.score > 0) payload.resume_url = bestMatches.resume.value;
+
+    // Send to Python Backend
+    var options = {
+      "method": "post",
+      "contentType": "application/json",
+      "payload": JSON.stringify(payload),
+      "muteHttpExceptions": true
+    };
+
+    UrlFetchApp.fetch(WEBHOOK_URL, options);
+    
+  } catch (error) {
+    Logger.log("Error in onFormSubmit: " + error.toString());
+  }
 }</code></pre>
                             </div>
                         </div>

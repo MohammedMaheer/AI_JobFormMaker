@@ -1,0 +1,1376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Candidate Ranking - AI Recruitment Tool</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=2">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/gas-styles.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/kanban.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        .ranking-results {
+            margin-top: 2rem;
+        }
+        .candidate-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 0.5rem;
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+            transition: all 0.2s;
+        }
+        .candidate-card:hover {
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.2);
+            border-color: var(--primary-color);
+        }
+        .score-badge {
+            background: var(--info-color);
+            color: white;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-weight: 600;
+            font-size: 0.875rem;
+        }
+        .score-high { background-color: var(--success-color); }
+        .score-medium { background-color: var(--warning-color); }
+        .score-low { background-color: var(--danger-color); }
+        
+        .candidate-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+        .candidate-header h4 {
+            color: var(--text-primary);
+        }
+        .candidate-details {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+        .detail-item label {
+            display: block;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            margin-bottom: 0.25rem;
+        }
+        .detail-item span {
+            font-weight: 500;
+            color: var(--text-primary);
+        }
+        .ai-feedback {
+            background: var(--dark-color);
+            padding: 1rem;
+            border-radius: 0.375rem;
+            font-size: 0.875rem;
+            color: #c8c8cd;
+            border: 1px solid var(--border-color);
+        }
+        .file-list {
+            margin-top: 0.5rem;
+            font-size: 0.875rem;
+            color: #c8c8cd;
+        }
+        /* Modal Styles */
+        .modal {
+            display: none; 
+            position: fixed; 
+            z-index: 1000; 
+            left: 0;
+            top: 0;
+            width: 100%; 
+            height: 100%; 
+            overflow: auto; 
+            background-color: rgba(0,0,0,0.5); 
+            backdrop-filter: blur(4px);
+        }
+        .modal-content {
+            background-color: var(--card-bg);
+            margin: 5% auto; 
+            padding: 2rem;
+            border: 1px solid var(--border-color);
+            border-radius: 0.5rem;
+            width: 90%;
+            max-width: 900px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+        .close {
+            color: var(--text-secondary);
+            float: right;
+            font-size: 1.5rem;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .close:hover,
+        .close:focus {
+            color: var(--text-primary);
+            text-decoration: none;
+            cursor: pointer;
+        }
+        .form-group {
+            margin-bottom: 1rem;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: var(--text-primary);
+            font-weight: 500;
+        }
+        .form-control {
+            width: 100%;
+            padding: 0.5rem;
+            border: 1px solid var(--border-color);
+            border-radius: 0.25rem;
+            background-color: #1e293b;
+            color: #f8fafc;
+        }
+        .form-control option {
+            background-color: #1e293b;
+            color: #f8fafc;
+        }
+        .form-actions {
+            display: flex;
+            gap: 1rem;
+            margin-top: 1.5rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="logo">
+                <img src="data:image/png;base64,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" alt="Acceleration Robotics" class="company-logo">
+                <h1 class="text-gradient">Candidate Ranking</h1>
+            </div>
+            <nav>
+                <a href="/" class="btn btn-secondary">Back to Question Generator</a>
+            </nav>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Dashboard Controls -->
+            <section class="card" style="margin-bottom: 2rem;">
+                <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+                    <h2>Candidate Dashboard</h2>
+                    <div>
+                        <button id="view-toggle-btn" class="btn btn-secondary" style="margin-right: 10px;">
+                            <i class="fas fa-columns"></i> Kanban View
+                        </button>
+                        <button id="reset-btn" class="btn btn-danger" style="margin-right: 10px;">
+                            <i class="fas fa-trash-alt"></i> Reset Data
+                        </button>
+                        <button id="refresh-btn" class="btn btn-primary">
+                            <i class="fas fa-sync-alt"></i> Refresh Candidates
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <p>View candidates who have applied via the Google Form.</p>
+                </div>
+            </section>
+
+            <!-- Kanban Board Section -->
+            <section id="kanban-section" style="display: none; overflow-x: auto; padding-bottom: 20px;">
+                <div class="kanban-board">
+                    <!-- Column 1: Applied -->
+                    <div class="kanban-column" id="col-applied" ondrop="drop(event, 'applied')" ondragover="allowDrop(event)">
+                        <div class="kanban-header header-applied">
+                            <h3><i class="fas fa-inbox"></i> Applied</h3>
+                            <span class="count-badge" id="count-applied">0</span>
+                        </div>
+                        <div class="kanban-items" id="list-applied">
+                            <!-- Items go here -->
+                        </div>
+                    </div>
+
+                    <!-- Column 2: Interview Scheduled -->
+                    <div class="kanban-column" id="col-interview" ondrop="drop(event, 'interview_scheduled')" ondragover="allowDrop(event)">
+                        <div class="kanban-header header-interview">
+                            <h3><i class="far fa-calendar-check"></i> Interview Scheduled</h3>
+                            <span class="count-badge" id="count-interview">0</span>
+                        </div>
+                        <div class="kanban-items" id="list-interview">
+                            <!-- Items go here -->
+                        </div>
+                    </div>
+
+                    <!-- Column 3: Rejected -->
+                    <div class="kanban-column" id="col-rejected" ondrop="drop(event, 'rejected')" ondragover="allowDrop(event)">
+                        <div class="kanban-header header-rejected">
+                            <h3><i class="fas fa-times-circle"></i> Rejected</h3>
+                            <span class="count-badge" id="count-rejected">0</span>
+                        </div>
+                        <div class="kanban-items" id="list-rejected">
+                            <!-- Items go here -->
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="card input-section" style="display: none;">
+                <div class="card-header">
+                    <h2>Rank Candidates (Manual Upload)</h2>
+                </div>
+                <div class="card-body">
+                    <form id="ranking-form">
+                        <!-- Job Description -->
+                        <div class="form-group">
+                            <label for="job-description">
+                                <i class="fas fa-briefcase"></i> Job Description
+                            </label>
+                            <textarea id="job-description" name="job_description" rows="6"
+                                      placeholder="Paste the job description here..." required></textarea>
+                        </div>
+
+                        <!-- Candidate Resumes -->
+                        <div class="form-group">
+                            <label>
+                                <i class="fas fa-users"></i> Upload Candidate Resumes
+                            </label>
+                            <div class="file-upload-wrapper" id="resumes-upload-wrapper">
+                                <input type="file" id="resumes-input" name="resumes" 
+                                       accept=".pdf,.docx,.txt" multiple hidden>
+                                <div class="file-upload-area" id="resumes-upload-area">
+                                    <i class="fas fa-cloud-upload-alt"></i>
+                                    <p>Drag & drop resumes here or <span class="browse-link">browse</span></p>
+                                    <small>Upload multiple files (PDF, DOCX, TXT)</small>
+                                </div>
+                                <div class="file-list" id="resumes-list"></div>
+                            </div>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary btn-block" id="rank-btn">
+                            <i class="fas fa-sort-amount-down"></i> Rank Candidates
+                        </button>
+                    </form>
+                </div>
+            </section>
+
+            <!-- Results Section -->
+            <section class="ranking-results" id="results-section" style="display: none;">
+                <h3>Ranking Results</h3>
+                <div id="candidates-list">
+                    <!-- Candidates will be populated here -->
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Candidate Details Modal -->
+    <div class="modal" id="candidate-modal">
+        <div class="modal-content modal-lg">
+            <div class="modal-header">
+                <h3 id="modal-candidate-name">Candidate Details</h3>
+                <button class="modal-close" id="close-candidate-modal">&times;</button>
+            </div>
+            <div class="modal-body" id="modal-candidate-body">
+                <!-- Content will be injected here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Interview Schedule Modal -->
+    <div id="scheduleModal" class="modal">
+      <div class="modal-content">
+        <span class="close">&times;</span>
+        <h2 style="margin-bottom: 1.5rem; color: var(--text-primary);">Schedule Interview</h2>
+        <form id="scheduleForm">
+            <input type="hidden" id="candidateName">
+            <input type="hidden" id="candidateEmail">
+            
+            <div class="form-group">
+                <label for="interviewTitle">Event Title</label>
+                <input type="text" id="interviewTitle" class="form-control" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="interviewDate">Date & Time</label>
+                <input type="datetime-local" id="interviewDate" class="form-control" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="interviewDuration">Duration</label>
+                <select id="interviewDuration" class="form-control">
+                    <option value="30">30 Minutes</option>
+                    <option value="45">45 Minutes</option>
+                    <option value="60" selected>1 Hour</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="interviewType">Type</label>
+                <select id="interviewType" class="form-control">
+                    <option value="Google Meet">Google Meet</option>
+                    <option value="Zoom">Zoom</option>
+                    <option value="Phone">Phone Call</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="meetingLink">Meeting Link (Optional)</label>
+                <input type="text" id="meetingLink" class="form-control" placeholder="e.g. https://meet.google.com/abc-defg-hij">
+                <small style="color: #aaa;">Leave empty to let them know a link will be provided later.</small>
+            </div>
+            
+            <div class="form-actions">
+                <button type="button" id="generateGCal" class="btn btn-primary" style="flex: 1;">
+                    <i class="fas fa-paper-plane"></i> Send Interview Invite
+                </button>
+                <button type="button" id="copyLink" class="btn btn-secondary" style="flex: 1;">
+                    <i class="fas fa-copy"></i> Copy Link
+                </button>
+            </div>
+            
+            <div style="margin-top: 1rem; border-top: 1px solid #eee; padding-top: 1rem;">
+                 <button type="button" id="rejectCandidateBtn" class="btn btn-danger" style="width: 100%;">
+                    <i class="fas fa-times-circle"></i> Reject Candidate
+                </button>
+            </div>
+        </form>
+      </div>
+    </div>
+
+    <script>
+        const form = document.getElementById('ranking-form');
+        const fileInput = document.getElementById('resumes-input');
+        const uploadArea = document.getElementById('resumes-upload-area');
+        const fileList = document.getElementById('resumes-list');
+        const resultsSection = document.getElementById('results-section');
+        const candidatesList = document.getElementById('candidates-list');
+        const rankBtn = document.getElementById('rank-btn');
+        const refreshBtn = document.getElementById('refresh-btn');
+        
+        let currentCandidates = []; // Store globally for switching views
+
+        // Helper function to ensure LinkedIn URL has proper protocol
+        function formatLinkedInUrl(url) {
+            if (!url) return '';
+            url = url.trim();
+            if (url.startsWith('http://') || url.startsWith('https://')) {
+                return url;
+            }
+            return 'https://' + url;
+        }
+
+        // Load candidates on startup
+        document.addEventListener('DOMContentLoaded', loadCandidates);
+        refreshBtn.addEventListener('click', loadCandidates);
+
+        async function loadCandidates() {
+            refreshBtn.disabled = true;
+            refreshBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Loading...';
+            
+            try {
+                const response = await fetch('/api/candidates');
+                const data = await response.json();
+                
+                if (data.candidates && data.candidates.length > 0) {
+                    // Sort by score descending
+                    const sorted = data.candidates.sort((a, b) => (b.total_score || 0) - (a.total_score || 0));
+                    currentCandidates = sorted;
+                    
+                    if (typeof isKanbanView !== 'undefined' && isKanbanView) {
+                        renderKanbanBoard(currentCandidates);
+                    } else {
+                        displayResults(sorted);
+                    }
+                } else {
+                    currentCandidates = [];
+                    resultsSection.style.display = 'block';
+                    candidatesList.innerHTML = '<p style="text-align: center; color: var(--text-secondary); padding: 2rem;">No candidates found yet. Submit an application via the form to see results here.</p>';
+                    
+                    if (typeof isKanbanView !== 'undefined' && isKanbanView) {
+                        renderKanbanBoard([]);
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading candidates:', error);
+                alert('Failed to load candidates.');
+            } finally {
+                refreshBtn.disabled = false;
+                refreshBtn.innerHTML = '<i class="fas fa-sync-alt"></i> Refresh Candidates';
+            }
+        }
+
+        // File Upload Handling
+        uploadArea.addEventListener('click', () => fileInput.click());
+        
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('drag-over');
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('drag-over');
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('drag-over');
+            if (e.dataTransfer.files.length) {
+                fileInput.files = e.dataTransfer.files;
+                updateFileList();
+            }
+        });
+
+        fileInput.addEventListener('change', updateFileList);
+
+        function updateFileList() {
+            fileList.innerHTML = '';
+            if (fileInput.files.length > 0) {
+                const ul = document.createElement('ul');
+                Array.from(fileInput.files).forEach(file => {
+                    const li = document.createElement('li');
+                    li.textContent = file.name;
+                    ul.appendChild(li);
+                });
+                fileList.appendChild(ul);
+            }
+        }
+
+        // Form Submission
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const formData = new FormData(form);
+            rankBtn.disabled = true;
+            rankBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Ranking...';
+            
+            try {
+                const response = await fetch('/api/rank', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    displayResults(data.results);
+                } else {
+                    alert('Error: ' + data.error);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('An error occurred while ranking candidates.');
+            } finally {
+                rankBtn.disabled = false;
+                rankBtn.innerHTML = '<i class="fas fa-sort-amount-down"></i> Rank Candidates';
+            }
+        });
+
+        // Modal Elements
+        const candidateModal = document.getElementById('candidate-modal');
+        const modalCandidateName = document.getElementById('modal-candidate-name');
+        const modalCandidateBody = document.getElementById('modal-candidate-body');
+        const closeCandidateModal = document.getElementById('close-candidate-modal');
+
+        // Close modal logic
+        if (closeCandidateModal) {
+            closeCandidateModal.addEventListener('click', () => {
+                candidateModal.classList.remove('active');
+            });
+        }
+
+        window.addEventListener('click', (e) => {
+            if (e.target === candidateModal) {
+                candidateModal.classList.remove('active');
+            }
+        });
+
+        function openCandidateModal(candidate) {
+            modalCandidateName.textContent = candidate.candidate_name || candidate.name || 'Candidate Details';
+            
+            let scoreClass = candidate.total_score >= 80 ? 'score-high' : 
+                             candidate.total_score >= 60 ? 'score-medium' : 'score-low';
+            
+            let scoreDisplay = `${candidate.total_score || 0}% Match`;
+            
+            if (candidate.parsing_failed) {
+                scoreClass = 'score-medium'; // Neutral color
+                scoreDisplay = 'Manual Review';
+            }
+
+            let prosHtml = '';
+            let consHtml = '';
+            
+            if (candidate.ai_analysis) {
+                if (candidate.ai_analysis.pros && candidate.ai_analysis.pros.length > 0) {
+                    prosHtml = `
+                        <div style="flex: 1; min-width: 300px; background: rgba(16, 185, 129, 0.05); padding: 20px; border-radius: 16px; border: 1px solid rgba(16, 185, 129, 0.2);">
+                            <strong style="color: var(--success-color); display: flex; align-items: center; gap: 10px; margin-bottom: 15px; font-size: 1.1rem;">
+                                <i class="fas fa-check-circle"></i> Strengths
+                            </strong>
+                            <ul style="margin: 0 0 0 20px; color: #d0d0d5; line-height: 1.6;">
+                                ${candidate.ai_analysis.pros.map(pro => `<li style="margin-bottom: 8px;">${pro}</li>`).join('')}
+                            </ul>
+                        </div>`;
+                }
+                
+                if (candidate.ai_analysis.cons && candidate.ai_analysis.cons.length > 0) {
+                    consHtml = `
+                        <div style="flex: 1; min-width: 300px; background: rgba(239, 68, 68, 0.05); padding: 20px; border-radius: 16px; border: 1px solid rgba(239, 68, 68, 0.2);">
+                            <strong style="color: var(--danger-color); display: flex; align-items: center; gap: 10px; margin-bottom: 15px; font-size: 1.1rem;">
+                                <i class="fas fa-exclamation-circle"></i> Areas for Improvement
+                            </strong>
+                            <ul style="margin: 0 0 0 20px; color: #d0d0d5; line-height: 1.6;">
+                                ${candidate.ai_analysis.cons.map(con => `<li style="margin-bottom: 8px;">${con}</li>`).join('')}
+                            </ul>
+                        </div>`;
+                }
+            }
+
+            const viewResumeBtn = candidate.file_url ? 
+                `<a href="${candidate.file_url}" target="_blank" class="btn btn-primary" style="display: inline-flex; align-items: center; gap: 8px; text-decoration: none; margin-top: 10px;">
+                    <i class="fas fa-file-alt"></i> View Full Resume
+                 </a>` : '';
+
+            // Construct Gmail Compose URL
+            const emailSubject = encodeURIComponent(`Interview Invitation: ${candidate.candidate_name || 'Candidate'}`);
+            const emailBody = encodeURIComponent(`Hi ${candidate.candidate_name || 'Candidate'},\n\nWe have reviewed your application and would like to invite you for an interview.\n\nPlease let us know your availability.\n\nBest regards,\nRecruiting Team`);
+            const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${candidate.candidate_email}&su=${emailSubject}&body=${emailBody}`;
+
+            modalCandidateBody.innerHTML = `
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 30px; border-bottom: 1px solid var(--border-color); padding-bottom: 20px;">
+                    <div>
+                        <div style="font-size: 1.2rem; font-weight: 500; color: var(--text-primary); margin-bottom: 8px; display: flex; align-items: center; gap: 10px;">
+                            <i class="fas fa-envelope" style="color: var(--primary-color);"></i> 
+                            ${candidate.candidate_email ? 
+                                `<a href="${gmailUrl}" target="_blank" style="color: var(--text-primary); text-decoration: none; border-bottom: 1px dashed var(--text-secondary); transition: all 0.2s;" onmouseover="this.style.color='var(--primary-color)'" onmouseout="this.style.color='var(--text-primary)'" title="Compose Interview Email in Gmail">
+                                    ${candidate.candidate_email} <i class="fas fa-external-link-alt" style="font-size: 0.7em; margin-left: 5px; opacity: 0.7;"></i>
+                                 </a>` : 'N/A'}
+                        </div>
+                        <div style="font-size: 1.2rem; font-weight: 500; color: var(--text-primary); margin-bottom: 8px; display: flex; align-items: center; gap: 10px;">
+                            <i class="fas fa-phone" style="color: var(--primary-color);"></i> 
+                            ${candidate.candidate_phone || 'N/A'}
+                        </div>
+                        <div style="font-size: 1.2rem; font-weight: 500; color: var(--text-primary); display: flex; align-items: center; gap: 10px;">
+                            <i class="fab fa-linkedin" style="color: #0077b5;"></i> 
+                            ${candidate.linkedin_url ? 
+                                `<a href="${formatLinkedInUrl(candidate.linkedin_url)}" target="_blank" style="color: #0077b5; text-decoration: none; border-bottom: 1px dashed #0077b5; transition: all 0.2s;" onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'" title="View LinkedIn Profile">
+                                    LinkedIn Profile <i class="fas fa-external-link-alt" style="font-size: 0.7em; margin-left: 5px; opacity: 0.7;"></i>
+                                 </a>` : '<span style="color: var(--warning-color);">Not provided (-2 pts)</span>'}
+                        </div>
+                    </div>
+                    <div class="score-badge ${scoreClass}" style="font-size: 1.4rem; padding: 0.75rem 1.5rem; box-shadow: 0 4px 12px rgba(0,0,0,0.2);">
+                        ${scoreDisplay}
+                    </div>
+                </div>
+
+                ${candidate.parsing_failed ? `
+                <div style="background-color: rgba(245, 158, 11, 0.1); color: #f59e0b; padding: 1.5rem; border-radius: 12px; margin-bottom: 2rem; border: 1px solid rgba(245, 158, 11, 0.3);">
+                    <i class="fas fa-exclamation-triangle"></i> <strong>Resume Parsing Failed</strong><br>
+                    The system could not automatically read the resume file. Please view the resume manually to evaluate this candidate.
+                </div>
+                ` : ''}
+
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 30px;">
+                    <div style="background: rgba(255, 255, 255, 0.03); padding: 20px; border-radius: 16px; text-align: center; border: 1px solid var(--border-color);">
+                        <div style="font-size: 1rem; color: #c0c0c5; margin-bottom: 8px;">Skills Match</div>
+                        <div style="font-size: 2rem; font-weight: 700; color: var(--primary-color);">${candidate.breakdown?.skills_match || 0}%</div>
+                    </div>
+                    <div style="background: rgba(255, 255, 255, 0.03); padding: 20px; border-radius: 16px; text-align: center; border: 1px solid var(--border-color);">
+                        <div style="font-size: 1rem; color: #c0c0c5; margin-bottom: 8px;">Experience</div>
+                        <div style="font-size: 2rem; font-weight: 700; color: var(--primary-color);">${candidate.breakdown?.experience || 0}%</div>
+                    </div>
+                    <div style="background: rgba(255, 255, 255, 0.03); padding: 20px; border-radius: 16px; text-align: center; border: 1px solid var(--border-color);">
+                        <div style="font-size: 1rem; color: #c0c0c5; margin-bottom: 8px;">Education</div>
+                        <div style="font-size: 2rem; font-weight: 700; color: var(--primary-color);">${candidate.breakdown?.education || 0}%</div>
+                    </div>
+                </div>
+
+                <div style="margin-bottom: 30px; background: rgba(255, 255, 255, 0.02); padding: 25px; border-radius: 16px; border: 1px solid var(--border-color);">
+                    <h4 style="color: var(--text-primary); margin-bottom: 15px; font-size: 1.2rem; border-bottom: 1px solid var(--border-color); padding-bottom: 10px;">
+                        <i class="fas fa-robot" style="margin-right: 10px; color: var(--info-color);"></i> AI Executive Summary
+                    </h4>
+                    <p style="line-height: 1.8; color: #d0d0d5; font-size: 1.05rem;">
+                        ${candidate.ai_analysis?.summary || candidate.feedback || 'No summary available.'}
+                    </p>
+                </div>
+
+                <div style="display: flex; gap: 25px; margin-bottom: 30px; flex-wrap: wrap; align-items: stretch;">
+                    ${prosHtml}
+                    ${consHtml}
+                </div>
+
+                <div style="margin-top: 20px; text-align: right; border-top: 1px solid var(--border-color); padding-top: 20px;">
+                    ${viewResumeBtn}
+                </div>
+            `;
+
+            candidateModal.classList.add('active');
+        }
+
+        function displayResults(candidates) {
+            resultsSection.style.display = 'block';
+            candidatesList.innerHTML = '';
+            
+            if (candidates.length === 0) {
+                candidatesList.innerHTML = '<div class="empty-state"><i class="fas fa-users" style="font-size: 3rem; color: var(--text-secondary); margin-bottom: 1rem;"></i><p>No candidates found yet.</p></div>';
+                return;
+            }
+            
+            // Group candidates by job
+            const candidatesByJob = {};
+            candidates.forEach(candidate => {
+                const jobId = candidate.job_id || 'unknown';
+                const jobTitle = candidate.job_title || 'Unassigned Job';
+                if (!candidatesByJob[jobId]) {
+                    candidatesByJob[jobId] = { title: jobTitle, candidates: [] };
+                }
+                candidatesByJob[jobId].candidates.push(candidate);
+            });
+            
+            const pendingIds = []; // Track pending candidates
+            
+            // Render each job group
+            Object.keys(candidatesByJob).forEach(jobId => {
+                const group = candidatesByJob[jobId];
+                
+                // Create job section
+                const jobSection = document.createElement('div');
+                jobSection.className = 'job-group-section';
+                jobSection.style.cssText = 'margin-bottom: 2.5rem;';
+                
+                // Job header
+                const jobHeader = document.createElement('div');
+                jobHeader.className = 'job-group-header';
+                jobHeader.style.cssText = 'background: linear-gradient(135deg, var(--primary-color), var(--info-color)); color: white; padding: 1rem 1.5rem; border-radius: 12px; margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center;';
+                // Check if this is an orphan job group
+                const isOrphan = jobId === 'unknown' || !group.title || group.title === 'Unassigned Job';
+                
+                jobHeader.innerHTML = `
+                    <div>
+                        <h3 style="margin: 0; font-size: 1.1rem;">
+                            <i class="fas ${isOrphan ? 'fa-exclamation-triangle' : 'fa-briefcase'}" style="margin-right: 10px;"></i>
+                            ${isOrphan ? '⚠️ Unassigned Candidates' : group.title}
+                        </h3>
+                        <small style="opacity: 0.9;">${group.candidates.length} candidate${group.candidates.length !== 1 ? 's' : ''}${isOrphan ? ' - Need assignment to a job' : ''}</small>
+                    </div>
+                    <div style="display: flex; gap: 8px;">
+                        ${isOrphan ? `<button onclick="reassignOrphanCandidates()" class="btn btn-sm" style="background: rgba(255,255,255,0.3); color: white; border: 1px solid rgba(255,255,255,0.5);"><i class="fas fa-link"></i> Assign to Job</button>` : ''}
+                        ${jobId !== 'unknown' && !isOrphan ? `<a href="/job/${jobId}" class="btn btn-sm" style="background: rgba(255,255,255,0.2); color: white; border: 1px solid rgba(255,255,255,0.3);"><i class="fas fa-external-link-alt"></i> View Job</a>` : ''}
+                    </div>
+                `;
+                
+                // Style orphan header differently
+                if (isOrphan) {
+                    jobHeader.style.background = 'linear-gradient(135deg, #f59e0b, #d97706)';
+                }
+                
+                jobSection.appendChild(jobHeader);
+                
+                // Sort candidates within job by score
+                group.candidates.sort((a, b) => (b.total_score || 0) - (a.total_score || 0));
+                
+                group.candidates.forEach((candidate, index) => {
+                let scoreClass = candidate.total_score >= 80 ? 'score-high' : 
+                                 candidate.total_score >= 60 ? 'score-medium' : 'score-low';
+                
+                let scoreDisplay = `${candidate.total_score || 0}% Match`;
+                let actionButton = `<button class="btn btn-sm btn-outline-primary schedule-btn" 
+                                    onclick="event.stopPropagation(); openScheduleModal('${(candidate.candidate_name || candidate.name || '').replace(/'/g, "\\'")}', '${(candidate.candidate_email || candidate.email || '').replace(/'/g, "\\'")}', '${candidate.id}', '${(candidate.job_title || '').replace(/'/g, "\\'")}')"
+                                    style="font-size: 0.8rem; padding: 0.25rem 0.5rem; background: transparent; border: 1px solid var(--primary-color); color: var(--primary-color); border-radius: 4px; cursor: pointer;">
+                                <i class="far fa-calendar-alt"></i> Schedule
+                            </button>`;
+
+                // Handle Pending/Processing State
+                const isPending = candidate.status === 'pending' || (candidate.total_score === 0 && (!candidate.ai_analysis || candidate.ai_analysis.summary.includes('Pending')));
+
+                if (isPending) {
+                    scoreClass = 'score-medium';
+                    scoreDisplay = '<i class="fas fa-clock"></i> Pending';
+                    actionButton = `<button class="btn btn-sm btn-warning" 
+                                    onclick="event.stopPropagation(); processCandidate('${candidate.id}')"
+                                    style="font-size: 0.8rem; padding: 0.25rem 0.5rem; border-radius: 4px; cursor: pointer;">
+                                <i class="fas fa-cog fa-spin"></i> Processing...
+                            </button>`;
+                    pendingIds.push(candidate.id);
+                } else if (candidate.parsing_failed) {
+                    scoreClass = 'score-medium';
+                    scoreDisplay = '<i class="fas fa-exclamation-triangle"></i> Manual Review';
+                }
+                
+                const card = document.createElement('div');
+                card.className = 'candidate-card';
+                card.style.cursor = 'pointer';
+                
+                card.addEventListener('click', (e) => {
+                    if (e.target.closest('a') || e.target.closest('button')) return;
+                    openCandidateModal(candidate);
+                });
+                
+                card.innerHTML = `
+                    <div class="candidate-header">
+                        <div>
+                            <h4>#${index + 1} ${candidate.candidate_name || candidate.name || 'Unknown Candidate'}</h4>
+                            <div style="font-size: 0.9rem; color: var(--text-secondary); margin-top: 5px;">
+                                <i class="fas fa-envelope"></i> ${candidate.candidate_email || candidate.email || 'N/A'}
+                            </div>
+                            <div style="font-size: 0.9rem; color: var(--text-secondary); margin-top: 2px;">
+                                <i class="fas fa-phone"></i> ${candidate.candidate_phone || candidate.phone || 'N/A'}
+                            </div>
+                            <div style="font-size: 0.9rem; margin-top: 2px;">
+                                ${candidate.linkedin_url ? 
+                                    `<a href="${formatLinkedInUrl(candidate.linkedin_url)}" target="_blank" style="color: #0077b5; text-decoration: none;"><i class="fab fa-linkedin"></i> LinkedIn</a>` : 
+                                    `<span style="color: var(--warning-color);"><i class="fab fa-linkedin"></i> Not provided</span>`}
+                            </div>
+                        </div>
+                        <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 10px;">
+                            <span class="score-badge ${scoreClass}">${scoreDisplay}</span>
+                            ${actionButton}
+                        </div>
+                    </div>
+                    <div class="candidate-details">
+                        <div class="detail-item">
+                            <label>Skills</label>
+                            <span>${candidate.breakdown?.skills_match || 0}%</span>
+                        </div>
+                        <div class="detail-item">
+                            <label>Experience</label>
+                            <span>${candidate.breakdown?.experience || 0}%</span>
+                        </div>
+                        <div class="detail-item">
+                            <label>Education</label>
+                            <span>${candidate.breakdown?.education || 0}%</span>
+                        </div>
+                    </div>
+                    <div class="ai-feedback" style="max-height: 80px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;">
+                        <strong>Summary:</strong> ${candidate.ai_analysis?.summary || candidate.feedback || 'No feedback available.'}
+                    </div>
+                    <div style="margin-top: 10px; text-align: center; color: var(--primary-color); font-size: 0.9rem; font-weight: 500;">
+                        Click to view full details
+                    </div>
+                `;
+                jobSection.appendChild(card);
+            });
+            
+            candidatesList.appendChild(jobSection);
+            });
+
+            // Auto-process pending candidates
+            if (pendingIds.length > 0) {
+                console.log('Auto-processing pending candidates:', pendingIds);
+                processPendingQueue(pendingIds);
+            }
+        }
+
+        async function processPendingQueue(ids) {
+            console.log(`Starting batch processing for ${ids.length} candidates...`);
+            
+            // Process sequentially to avoid hitting API rate limits
+            // (OpenAI/Perplexity keys often have concurrency limits)
+            for (let i = 0; i < ids.length; i++) {
+                const id = ids[i];
+                const btn = document.querySelector(`button[onclick*="${id}"]`);
+                
+                if (btn) {
+                    btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Processing (${i+1}/${ids.length})...`;
+                    btn.disabled = true;
+                }
+
+                try {
+                    await fetch(`/api/process/${id}`, { method: 'POST' });
+                    // Small delay to be nice to the API
+                    await new Promise(r => setTimeout(r, 1000));
+                } catch (e) {
+                    console.error(`Failed to process ${id}:`, e);
+                }
+            }
+            
+            // Reload after all are done
+            loadCandidates();
+        }
+
+        async function processCandidate(id) {
+            // Manual trigger fallback
+            try {
+                const btn = event.target.closest('button');
+                const originalText = btn.innerHTML;
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
+                btn.disabled = true;
+
+                const response = await fetch(`/api/process/${id}`, { method: 'POST' });
+                const data = await response.json();
+
+                if (data.success) {
+                    loadCandidates(); 
+                } else {
+                    alert('Error: ' + data.error);
+                    btn.innerHTML = originalText;
+                    btn.disabled = false;
+                }
+            } catch (e) {
+                console.error(e);
+                alert('Failed to process candidate.');
+            }
+        }
+
+        // Reassign orphan candidates to a job
+        async function reassignOrphanCandidates() {
+            // First, get list of available jobs
+            try {
+                const jobsResponse = await fetch('/api/jobs');
+                const jobsData = await jobsResponse.json();
+                
+                if (!jobsData.jobs || jobsData.jobs.length === 0) {
+                    alert('No jobs available. Please create a job first.');
+                    return;
+                }
+                
+                // Build selection options
+                const activeJobs = jobsData.jobs.filter(j => j.status === 'active');
+                if (activeJobs.length === 0) {
+                    alert('No active jobs available. Please create or activate a job first.');
+                    return;
+                }
+                
+                let jobOptions = activeJobs.map(j => `${j.title} (ID: ${j.id.substring(0, 8)}...)`).join('\n');
+                let selectedTitle = prompt(`Select a job to assign orphan candidates to:\n\n${jobOptions}\n\nEnter the job title:`);
+                
+                if (!selectedTitle) return;
+                
+                // Find the matching job
+                const selectedJob = activeJobs.find(j => j.title.toLowerCase().includes(selectedTitle.toLowerCase()));
+                if (!selectedJob) {
+                    alert('Job not found. Please enter the exact title.');
+                    return;
+                }
+                
+                // Call the fix-orphans endpoint
+                const response = await fetch('/api/candidates/fix-orphans', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ job_id: selectedJob.id })
+                });
+                
+                const data = await response.json();
+                if (data.success) {
+                    alert(`Success! ${data.message}`);
+                    loadCandidates();
+                } else {
+                    alert('Error: ' + (data.error || data.message));
+                }
+            } catch (e) {
+                console.error(e);
+                alert('Failed to reassign candidates.');
+            }
+        }
+
+        // --- Kanban Board Logic ---
+        const viewToggleBtn = document.getElementById('view-toggle-btn');
+        const kanbanSection = document.getElementById('kanban-section');
+        let isKanbanView = false;
+
+        if (viewToggleBtn) {
+            viewToggleBtn.addEventListener('click', () => {
+                isKanbanView = !isKanbanView;
+                if (isKanbanView) {
+                    resultsSection.style.display = 'none';
+                    kanbanSection.style.display = 'block';
+                    viewToggleBtn.innerHTML = '<i class="fas fa-list"></i> List View';
+                    renderKanbanBoard(currentCandidates);
+                } else {
+                    resultsSection.style.display = 'block';
+                    kanbanSection.style.display = 'none';
+                    viewToggleBtn.innerHTML = '<i class="fas fa-columns"></i> Kanban View';
+                }
+            });
+        }
+
+        function renderKanbanBoard(candidates) {
+            const cols = {
+                'applied': document.getElementById('list-applied'),
+                'interview_scheduled': document.getElementById('list-interview'),
+                'rejected': document.getElementById('list-rejected')
+            };
+            
+            // Clear columns
+            Object.values(cols).forEach(col => {
+                if (col) col.innerHTML = '';
+            });
+            
+            // Reset counts
+            const counts = { 'applied': 0, 'interview_scheduled': 0, 'rejected': 0 };
+
+            // Group candidates by job within each status
+            const candidatesByStatusAndJob = {
+                'applied': {},
+                'interview_scheduled': {},
+                'rejected': {}
+            };
+
+            candidates.forEach(candidate => {
+                // Map 'processed' and 'pending' to 'applied' for Kanban display
+                let status = candidate.status || 'applied';
+                if (status === 'processed' || status === 'pending') {
+                    status = 'applied';
+                }
+                
+                if (candidatesByStatusAndJob[status]) {
+                    const jobId = candidate.job_id || 'unknown';
+                    const jobTitle = candidate.job_title || 'Unassigned Job';
+                    
+                    if (!candidatesByStatusAndJob[status][jobId]) {
+                        candidatesByStatusAndJob[status][jobId] = { title: jobTitle, candidates: [] };
+                    }
+                    candidatesByStatusAndJob[status][jobId].candidates.push(candidate);
+                    counts[status]++;
+                }
+            });
+
+            // Render grouped candidates for each column
+            Object.entries(candidatesByStatusAndJob).forEach(([status, jobs]) => {
+                const col = cols[status];
+                if (!col) return;
+                
+                // Sort jobs by title (Unassigned last)
+                const sortedJobs = Object.entries(jobs).sort(([, a], [, b]) => {
+                    if (a.title === 'Unassigned Job') return 1;
+                    if (b.title === 'Unassigned Job') return -1;
+                    return a.title.localeCompare(b.title);
+                });
+                
+                sortedJobs.forEach(([jobId, jobData]) => {
+                    // Create job group header
+                    const jobGroup = document.createElement('div');
+                    jobGroup.className = 'kanban-job-group';
+                    jobGroup.style.cssText = 'margin-bottom: 1rem;';
+                    
+                    const jobHeader = document.createElement('div');
+                    jobHeader.className = 'kanban-job-header';
+                    jobHeader.style.cssText = 'background: linear-gradient(135deg, var(--primary-color), var(--info-color)); color: white; padding: 0.5rem 0.75rem; border-radius: 8px; margin-bottom: 0.5rem; font-size: 0.85rem; font-weight: 600; display: flex; justify-content: space-between; align-items: center;';
+                    jobHeader.innerHTML = `
+                        <span><i class="fas fa-briefcase"></i> ${jobData.title}</span>
+                        <span class="job-count-badge" style="background: rgba(255,255,255,0.3); padding: 2px 8px; border-radius: 10px; font-size: 0.75rem;">${jobData.candidates.length}</span>
+                    `;
+                    jobGroup.appendChild(jobHeader);
+                    
+                    // Add candidates for this job
+                    jobData.candidates.forEach(candidate => {
+                        const card = createKanbanCard(candidate);
+                        jobGroup.appendChild(card);
+                    });
+                    
+                    col.appendChild(jobGroup);
+                });
+            });
+
+            // Update badges
+            document.getElementById('count-applied').textContent = counts['applied'];
+            document.getElementById('count-interview').textContent = counts['interview_scheduled'];
+            document.getElementById('count-rejected').textContent = counts['rejected'];
+        }
+
+        function createKanbanCard(candidate) {
+            const div = document.createElement('div');
+            div.className = 'kanban-card';
+            div.draggable = true;
+            div.id = `card-${candidate.id}`;
+            div.ondragstart = (e) => drag(e, candidate);
+            
+            // Click to open details
+            div.onclick = (e) => {
+                if (!e.target.closest('button')) openCandidateModal(candidate);
+            };
+
+            let scoreClass = candidate.total_score >= 80 ? 'score-high' : 
+                             candidate.total_score >= 60 ? 'score-medium' : 'score-low';
+            
+            // Safe date formatting
+            let dateStr = 'N/A';
+            try {
+                if (candidate.timestamp) {
+                    dateStr = new Date(candidate.timestamp).toLocaleDateString();
+                }
+            } catch (e) {
+                console.warn('Error parsing date:', e);
+            }
+            
+            div.innerHTML = `
+                <div class="kanban-card-header">
+                    <div class="kanban-card-title">${candidate.candidate_name || candidate.name || 'Unknown'}</div>
+                    <div class="kanban-card-score ${scoreClass}">${candidate.total_score || 0}%</div>
+                </div>
+                <div class="kanban-card-details">
+                    <div><i class="fas fa-envelope"></i> ${candidate.candidate_email || candidate.email || 'N/A'}</div>
+                    <div><i class="fas fa-briefcase"></i> Exp: ${candidate.breakdown?.experience || 0}%</div>
+                </div>
+                <div class="kanban-card-footer">
+                    <div class="kanban-card-date">${dateStr}</div>
+                </div>
+            `;
+            return div;
+        }
+
+        // Drag and Drop Functions
+        let draggedCandidate = null;
+
+        function drag(ev, candidate) {
+            draggedCandidate = candidate;
+            ev.dataTransfer.setData("text", ev.target.id);
+            ev.target.classList.add('dragging');
+        }
+
+        function allowDrop(ev) {
+            ev.preventDefault();
+            const col = ev.target.closest('.kanban-column');
+            if (col) {
+                col.classList.add('drag-over');
+            }
+        }
+
+        // Remove drag-over style when leaving
+        document.addEventListener('dragleave', (e) => {
+            if (e.target.classList.contains('kanban-column')) {
+                e.target.classList.remove('drag-over');
+            }
+        });
+
+        async function drop(ev, newStatus) {
+            ev.preventDefault();
+            const col = ev.target.closest('.kanban-column');
+            if (col) col.classList.remove('drag-over');
+            
+            if (!draggedCandidate) return;
+            
+            // Normalize status for comparison (processed/pending count as applied)
+            let oldStatus = draggedCandidate.status || 'applied';
+            if (oldStatus === 'processed' || oldStatus === 'pending') {
+                oldStatus = 'applied';
+            }
+            if (oldStatus === newStatus) return;
+
+            // Logic for specific columns
+            if (newStatus === 'rejected') {
+                if (confirm(`Are you sure you want to reject ${draggedCandidate.candidate_name || draggedCandidate.name}? This will send a rejection email.`)) {
+                    await rejectCandidateKanban(draggedCandidate);
+                } else {
+                    return; // Cancel drop
+                }
+            } else if (newStatus === 'interview_scheduled') {
+                // Open modal for scheduling
+                openScheduleModal(draggedCandidate.candidate_name || draggedCandidate.name, draggedCandidate.candidate_email || draggedCandidate.email, draggedCandidate.id, draggedCandidate.job_title);
+                // We update status ONLY after they actually schedule/save in the modal? 
+                // For now, let's update status immediately as "Moved to Interview Stage"
+                // Ideally, the modal "Add to Calendar" should confirm the status change.
+                // Let's just update status now.
+                await updateStatus(draggedCandidate.id, newStatus);
+            } else {
+                // Just moving back to Applied
+                await updateStatus(draggedCandidate.id, newStatus);
+            }
+            
+            // Refresh UI
+            loadCandidates();
+        }
+
+        async function updateStatus(id, status) {
+            try {
+                const response = await fetch(`/api/candidates/${id}/status`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status })
+                });
+                const data = await response.json();
+                if (!data.success) alert('Failed to update status');
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        async function rejectCandidateKanban(candidate) {
+            // Call the reject API which sends email AND updates status (we added ID support)
+            try {
+                const response = await fetch('/api/reject', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        name: candidate.candidate_name || candidate.name, 
+                        email: candidate.candidate_email || candidate.email,
+                        id: candidate.id,
+                        job_title: candidate.job_title || null
+                    })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    alert('Rejection email sent.');
+                    // Status is updated by backend
+                } else {
+                    alert('Error sending rejection: ' + data.error);
+                }
+            } catch (e) {
+                console.error(e);
+            }
+            // Refresh regardless to sync state
+            loadCandidates();
+        }
+
+        // Update loadCandidates to store data globally
+        const originalLoadCandidates = loadCandidates;
+        loadCandidates = async function() {
+            refreshBtn.disabled = true;
+            refreshBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Loading...';
+            
+            try {
+                const response = await fetch('/api/candidates');
+                const data = await response.json();
+                
+                if (data.candidates) {
+                    currentCandidates = data.candidates; // Store globally
+                    
+                    // Sort by score descending
+                    const sorted = data.candidates.sort((a, b) => (b.total_score || 0) - (a.total_score || 0));
+                    
+                    if (isKanbanView) {
+                        renderKanbanBoard(sorted);
+                    } else {
+                        displayResults(sorted);
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading candidates:', error);
+            } finally {
+                refreshBtn.disabled = false;
+                refreshBtn.innerHTML = '<i class="fas fa-sync-alt"></i> Refresh Candidates';
+            }
+        }
+
+        // Reset Dashboard Functionality
+        const resetBtn = document.getElementById('reset-btn');
+        if (resetBtn) {
+            resetBtn.addEventListener('click', async () => {
+                if (confirm('Are you sure you want to delete ALL candidate data? This action cannot be undone.')) {
+                    try {
+                        resetBtn.disabled = true;
+                        resetBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Resetting...';
+                        
+                        const response = await fetch('/api/candidates', {
+                            method: 'DELETE'
+                        });
+                        
+                        const data = await response.json();
+                        
+                        if (data.success) {
+                            alert('Dashboard reset successfully.');
+                            // Clear the UI
+                            candidatesList.innerHTML = '';
+                            resultsSection.style.display = 'none';
+                            // Reload to ensure fresh state
+                            window.location.reload();
+                        } else {
+                            alert('Error resetting dashboard: ' + (data.error || 'Unknown error'));
+                        }
+                    } catch (error) {
+                        console.error('Error:', error);
+                        alert('An error occurred while resetting the dashboard.');
+                    } finally {
+                        resetBtn.disabled = false;
+                        resetBtn.innerHTML = '<i class="fas fa-trash-alt"></i> Reset Data';
+                    }
+                }
+            });
+        }
+
+        // --- Interview Schedule Modal Logic ---
+        const scheduleModal = document.getElementById('scheduleModal');
+        const closeScheduleBtn = scheduleModal.querySelector('.close');
+        const generateGCalBtn = document.getElementById('generateGCal');
+        const copyLinkBtn = document.getElementById('copyLink');
+        const rejectCandidateBtn = document.getElementById('rejectCandidateBtn');
+        let currentScheduleCandidateId = null;
+        let currentScheduleJobTitle = null;
+
+        window.openScheduleModal = function(name, email, id, jobTitle) {
+            document.getElementById('candidateName').value = name;
+            document.getElementById('candidateEmail').value = email;
+            currentScheduleCandidateId = id; // Store ID
+            currentScheduleJobTitle = jobTitle || null; // Store job title
+            document.getElementById('interviewTitle').value = `Interview with ${name}${jobTitle ? ' - ' + jobTitle : ''}`;
+            
+            // Load saved meeting link
+            const savedLink = localStorage.getItem('defaultMeetingLink');
+            if (savedLink) {
+                document.getElementById('meetingLink').value = savedLink;
+            }
+            
+            // Set default date to tomorrow 10am
+            const tomorrow = new Date();
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            tomorrow.setHours(10, 0, 0, 0);
+            // Adjust for timezone offset to ensure local time is correct in input
+            const offset = tomorrow.getTimezoneOffset() * 60000;
+            const localISOTime = (new Date(tomorrow - offset)).toISOString().slice(0, 16);
+            document.getElementById('interviewDate').value = localISOTime;
+            
+            scheduleModal.style.display = "block";
+        }
+
+        closeScheduleBtn.onclick = function() {
+            scheduleModal.style.display = "none";
+        }
+
+        // Update window click listener to handle both modals
+        window.addEventListener('click', (e) => {
+            if (e.target === scheduleModal) {
+                scheduleModal.style.display = "none";
+            }
+            // Existing modal listener is already there, but let's be safe
+            if (e.target === candidateModal) {
+                candidateModal.classList.remove('active');
+            }
+        });
+
+        function getCalendarUrl() {
+            const title = encodeURIComponent(document.getElementById('interviewTitle').value);
+            const dateInput = document.getElementById('interviewDate').value;
+            const duration = parseInt(document.getElementById('interviewDuration').value);
+            const type = encodeURIComponent(document.getElementById('interviewType').value);
+            const meetingLink = document.getElementById('meetingLink').value;
+            const email = encodeURIComponent(document.getElementById('candidateEmail').value);
+            const name = document.getElementById('candidateName').value;
+            
+            const startDate = new Date(dateInput);
+            const endDate = new Date(startDate.getTime() + duration * 60000);
+            
+            const formatTime = (date) => date.toISOString().replace(/-|:|\.\d\d\d/g, "");
+            
+            let detailsText = `Interview with ${name}\nType: ${decodeURIComponent(type)}`;
+            if (meetingLink) {
+                detailsText += `\nMeeting Link: ${meetingLink}`;
+            }
+            detailsText += `\n\nPlease confirm your availability.`;
+            
+            const details = encodeURIComponent(detailsText);
+            let location = "";
+            if (meetingLink) {
+                location = `&location=${encodeURIComponent(meetingLink)}`;
+            }
+            
+            return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${formatTime(startDate)}/${formatTime(endDate)}&details=${details}${location}&add=${email}`;
+        }
+
+        generateGCalBtn.onclick = async function() {
+            const name = document.getElementById('candidateName').value;
+            const email = document.getElementById('candidateEmail').value;
+            const title = document.getElementById('interviewTitle').value;
+            const dateInput = document.getElementById('interviewDate').value;
+            const duration = document.getElementById('interviewDuration').value;
+            const type = document.getElementById('interviewType').value;
+            const meetingLink = document.getElementById('meetingLink').value;
+            
+            const gcalUrl = getCalendarUrl();
+            
+            // Save meeting link for future use
+            if (meetingLink) {
+                localStorage.setItem('defaultMeetingLink', meetingLink);
+            }
+            
+            // Format date for display
+            const dateObj = new Date(dateInput);
+            const dateDisplay = dateObj.toLocaleString();
+
+            const originalText = this.innerHTML;
+            this.disabled = true;
+            this.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending...';
+
+            try {
+                const response = await fetch('/api/schedule', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        id: currentScheduleCandidateId,
+                        name: name,
+                        email: email,
+                        details: {
+                            title: title,
+                            start_time: dateInput,
+                            duration: duration,
+                            type: type,
+                            meeting_link: meetingLink,
+                            gcal_link: gcalUrl,
+                            date_display: dateDisplay,
+                            job_title: currentScheduleJobTitle
+                        }
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    alert(`Interview invitation sent to ${name}.`);
+                    scheduleModal.style.display = "none";
+                    loadCandidates(); // Refresh to show status change
+                } else {
+                    alert('Error sending invitation: ' + (data.error || 'Unknown error'));
+                }
+            } catch (e) {
+                console.error(e);
+                alert('Failed to send invitation.');
+            } finally {
+                this.disabled = false;
+                this.innerHTML = originalText;
+            }
+        }
+
+        copyLinkBtn.onclick = function() {
+            const url = getCalendarUrl();
+            navigator.clipboard.writeText(url).then(() => {
+                const originalText = this.innerHTML;
+                this.innerHTML = '<i class="fas fa-check"></i> Copied!';
+                setTimeout(() => {
+                    this.innerHTML = originalText;
+                }, 2000);
+            });
+        }
+
+        rejectCandidateBtn.onclick = async function() {
+            const name = document.getElementById('candidateName').value;
+            const email = document.getElementById('candidateEmail').value;
+
+            if (!confirm(`Are you sure you want to send a rejection email to ${name}?`)) {
+                return;
+            }
+
+            const originalText = this.innerHTML;
+            this.disabled = true;
+            this.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending...';
+
+            try {
+                const response = await fetch('/api/reject', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ 
+                        name, 
+                        email,
+                        id: currentScheduleCandidateId,
+                        job_title: currentScheduleJobTitle
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    alert(`Rejection email sent to ${name}.`);
+                    scheduleModal.style.display = "none";
+                } else {
+                    alert('Error sending email: ' + (data.error || 'Unknown error'));
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('An error occurred while sending the rejection email.');
+            } finally {
+                this.disabled = false;
+                this.innerHTML = originalText;
+            }
+        }
+    </script>
+</body>
+</html>

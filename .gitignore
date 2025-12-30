@@ -70,8 +70,6 @@ uploads/
 
 # Credentials
 credentials.json
-*.json
-!package.json
 
 # OS files
 .DS_Store
@@ -79,3 +77,12 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Local database
+data/
+
+# Test files
+test_*.py
+check_db.py
+debug_db.py
+fix_orphans.py
