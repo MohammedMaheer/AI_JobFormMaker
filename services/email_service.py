@@ -39,16 +39,17 @@ class EmailService:
             print(f"Failed to send email: {e}")
             return False
 
-    def send_candidate_confirmation(self, candidate_email, candidate_name):
+    def send_candidate_confirmation(self, candidate_email, candidate_name, job_title=None):
         if not candidate_email:
             return False
-            
-        subject = "Application Received - Next Steps"
+        
+        job_mention = f" for the <strong>{job_title}</strong> position" if job_title else ""
+        subject = f"Application Received{' - ' + job_title if job_title else ''} - Next Steps"
         body = f"""
         <html>
         <body>
             <h2>Hi {candidate_name},</h2>
-            <p>Thanks for applying! We have successfully received your application.</p>
+            <p>Thanks for applying{job_mention}! We have successfully received your application.</p>
             <p>Our AI-powered system is currently reviewing your profile. We will get back to you shortly with the next steps.</p>
             <br>
             <p>Best regards,</p>
@@ -58,16 +59,17 @@ class EmailService:
         """
         return self.send_email(candidate_email, subject, body, is_html=True)
 
-    def send_rejection_email(self, candidate_email, candidate_name):
+    def send_rejection_email(self, candidate_email, candidate_name, job_title=None):
         if not candidate_email:
             return False
-            
-        subject = "Update on your application"
+        
+        job_mention = f" for the <strong>{job_title}</strong> position" if job_title else ""
+        subject = f"Update on your application{' - ' + job_title if job_title else ''}"
         body = f"""
         <html>
         <body>
             <h2>Hi {candidate_name},</h2>
-            <p>Thank you for your interest in joining our team and for taking the time to apply.</p>
+            <p>Thank you for your interest in joining our team and for taking the time to apply{job_mention}.</p>
             <p>After careful review of your application and qualifications, we have decided to move forward with other candidates who more closely match our current requirements.</p>
             <p>We will keep your resume on file for future openings that may be a good fit.</p>
             <br>
@@ -82,8 +84,10 @@ class EmailService:
     def send_interview_invitation(self, candidate_email, candidate_name, interview_details):
         if not candidate_email:
             return False
-            
-        subject = f"Interview Invitation: {interview_details.get('title', 'Interview')}"
+        
+        job_title = interview_details.get('job_title', '')
+        job_mention = f" for the <strong>{job_title}</strong> position" if job_title else ""
+        subject = f"Interview Invitation{': ' + job_title if job_title else ''} - {interview_details.get('title', 'Interview')}"
         
         # Construct Google Calendar Link
         # Format: https://calendar.google.com/calendar/render?action=TEMPLATE&text={title}&dates={start}/{end}&details={details}&location={location}
@@ -118,9 +122,10 @@ class EmailService:
         <html>
         <body>
             <h2>Hi {candidate_name},</h2>
-            <p>We were impressed with your application and would like to invite you to an interview.</p>
+            <p>We were impressed with your application{job_mention} and would like to invite you to an interview.</p>
             
             <div style="background-color: #f8f9fa; padding: 15px; border-left: 4px solid #007bff; margin: 20px 0;">
+                {f'<p><strong>Position:</strong> {job_title}</p>' if job_title else ''}
                 <p><strong>Topic:</strong> {title}</p>
                 <p><strong>Date & Time:</strong> {interview_details.get('date_display')}</p>
                 <p><strong>Duration:</strong> {duration_minutes} minutes</p>

@@ -1122,9 +1122,10 @@ def process_application_background(data, candidate_id=None, base_url=None, skip_
                 # Send Candidate Confirmation
                 cand_email = score_result.get('candidate_email') or score_result.get('email')
                 cand_name = score_result.get('candidate_name') or score_result.get('name')
+                job_title = data.get('job_title') or score_result.get('job_title')
                 
                 if cand_email:
-                    email_service.send_candidate_confirmation(cand_email, cand_name)
+                    email_service.send_candidate_confirmation(cand_email, cand_name, job_title)
                 
                 # Send Admin Notification
                 email_service.send_admin_notification(score_result, base_url)
@@ -1212,11 +1213,12 @@ def reject_candidate():
     email = data.get('email')
     name = data.get('name')
     candidate_id = data.get('id') # Optional ID to update status
+    job_title = data.get('job_title') # Optional job title for email
     
     if not email:
         return jsonify({'success': False, 'error': 'Email required'}), 400
         
-    success = email_service.send_rejection_email(email, name)
+    success = email_service.send_rejection_email(email, name, job_title)
     
     # If ID provided, update status to rejected
     if success and candidate_id:

@@ -2,6 +2,7 @@
 // Global variables
 let currentCandidates = [];
 let isKanbanView = false;
+let currentJobTitle = null; // Store job title for emails
 
 // Helper function to ensure LinkedIn URL has proper protocol
 function formatLinkedInUrl(url) {
@@ -255,6 +256,7 @@ async function loadJobDetails() {
         const data = await response.json();
         
         if (data.job) {
+            currentJobTitle = data.job.title; // Store for email use
             jobTitleElement.textContent = data.job.title;
             jobMetaElement.innerHTML = `
                 <i class="far fa-calendar-alt"></i> Created: ${new Date(data.job.created_at).toLocaleDateString()} 
@@ -655,7 +657,8 @@ async function rejectCandidateKanban(candidate) {
             body: JSON.stringify({ 
                 name: candidate.candidate_name || candidate.name, 
                 email: candidate.candidate_email || candidate.email,
-                id: candidate.id 
+                id: candidate.id,
+                job_title: currentJobTitle
             })
         });
         const data = await response.json();
@@ -956,7 +959,7 @@ window.openScheduleModal = function(name, email, id) {
     document.getElementById('candidateName').value = name;
     document.getElementById('candidateEmail').value = email;
     currentScheduleCandidateId = id;
-    document.getElementById('interviewTitle').value = `Interview with ${name}`;
+    document.getElementById('interviewTitle').value = `Interview with ${name}${currentJobTitle ? ' - ' + currentJobTitle : ''}`;
     
     const savedLink = localStorage.getItem('defaultMeetingLink');
     if (savedLink) {
@@ -1040,7 +1043,8 @@ if (generateGCalBtn) {
                         type: type,
                         meeting_link: meetingLink,
                         gcal_link: gcalUrl,
-                        date_display: dateDisplay
+                        date_display: dateDisplay,
+                        job_title: currentJobTitle
                     }
                 })
             });
@@ -1096,7 +1100,12 @@ if (rejectCandidateBtn) {
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ name, email, id: currentScheduleCandidateId })
+                body: JSON.stringify({ 
+                    name, 
+                    email, 
+                    id: currentScheduleCandidateId,
+                    job_title: currentJobTitle
+                })
             });
 
             const data = await response.json();

@@ -674,7 +674,7 @@
                 
                 let scoreDisplay = `${candidate.total_score || 0}% Match`;
                 let actionButton = `<button class="btn btn-sm btn-outline-primary schedule-btn" 
-                                    onclick="event.stopPropagation(); openScheduleModal('${(candidate.candidate_name || candidate.name || '').replace(/'/g, "\\'")}', '${(candidate.candidate_email || candidate.email || '').replace(/'/g, "\\'")}', '${candidate.id}')"
+                                    onclick="event.stopPropagation(); openScheduleModal('${(candidate.candidate_name || candidate.name || '').replace(/'/g, "\\'")}', '${(candidate.candidate_email || candidate.email || '').replace(/'/g, "\\'")}', '${candidate.id}', '${(candidate.job_title || '').replace(/'/g, "\\'")}')"
                                     style="font-size: 0.8rem; padding: 0.25rem 0.5rem; background: transparent; border: 1px solid var(--primary-color); color: var(--primary-color); border-radius: 4px; cursor: pointer;">
                                 <i class="far fa-calendar-alt"></i> Schedule
                             </button>`;
@@ -898,6 +898,13 @@
             // Reset counts
             const counts = { 'applied': 0, 'interview_scheduled': 0, 'rejected': 0 };
 
+            // Group candidates by job within each status
+            const candidatesByStatusAndJob = {
+                'applied': {},
+                'interview_scheduled': {},
+                'rejected': {}
+            };
+
             candidates.forEach(candidate => {
                 // Map 'processed' and 'pending' to 'applied' for Kanban display
                 let status = candidate.status || 'applied';
@@ -905,11 +912,53 @@
                     status = 'applied';
                 }
                 
-                if (cols[status]) {
-                    const card = createKanbanCard(candidate);
-                    cols[status].appendChild(card);
+                if (candidatesByStatusAndJob[status]) {
+                    const jobId = candidate.job_id || 'unknown';
+                    const jobTitle = candidate.job_title || 'Unassigned Job';
+                    
+                    if (!candidatesByStatusAndJob[status][jobId]) {
+                        candidatesByStatusAndJob[status][jobId] = { title: jobTitle, candidates: [] };
+                    }
+                    candidatesByStatusAndJob[status][jobId].candidates.push(candidate);
                     counts[status]++;
                 }
+            });
+
+            // Render grouped candidates for each column
+            Object.entries(candidatesByStatusAndJob).forEach(([status, jobs]) => {
+                const col = cols[status];
+                if (!col) return;
+                
+                // Sort jobs by title (Unassigned last)
+                const sortedJobs = Object.entries(jobs).sort(([, a], [, b]) => {
+                    if (a.title === 'Unassigned Job') return 1;
+                    if (b.title === 'Unassigned Job') return -1;
+                    return a.title.localeCompare(b.title);
+                });
+                
+                sortedJobs.forEach(([jobId, jobData]) => {
+                    // Create job group header
+                    const jobGroup = document.createElement('div');
+                    jobGroup.className = 'kanban-job-group';
+                    jobGroup.style.cssText = 'margin-bottom: 1rem;';
+                    
+                    const jobHeader = document.createElement('div');
+                    jobHeader.className = 'kanban-job-header';
+                    jobHeader.style.cssText = 'background: linear-gradient(135deg, var(--primary-color), var(--info-color)); color: white; padding: 0.5rem 0.75rem; border-radius: 8px; margin-bottom: 0.5rem; font-size: 0.85rem; font-weight: 600; display: flex; justify-content: space-between; align-items: center;';
+                    jobHeader.innerHTML = `
+                        <span><i class="fas fa-briefcase"></i> ${jobData.title}</span>
+                        <span class="job-count-badge" style="background: rgba(255,255,255,0.3); padding: 2px 8px; border-radius: 10px; font-size: 0.75rem;">${jobData.candidates.length}</span>
+                    `;
+                    jobGroup.appendChild(jobHeader);
+                    
+                    // Add candidates for this job
+                    jobData.candidates.forEach(candidate => {
+                        const card = createKanbanCard(candidate);
+                        jobGroup.appendChild(card);
+                    });
+                    
+                    col.appendChild(jobGroup);
+                });
             });
 
             // Update badges
@@ -1006,7 +1055,7 @@
                 }
             } else if (newStatus === 'interview_scheduled') {
                 // Open modal for scheduling
-                openScheduleModal(draggedCandidate.candidate_name || draggedCandidate.name, draggedCandidate.candidate_email || draggedCandidate.email, draggedCandidate.id);
+                openScheduleModal(draggedCandidate.candidate_name || draggedCandidate.name, draggedCandidate.candidate_email || draggedCandidate.email, draggedCandidate.id, draggedCandidate.job_title);
                 // We update status ONLY after they actually schedule/save in the modal? 
                 // For now, let's update status immediately as "Moved to Interview Stage"
                 // Ideally, the modal "Add to Calendar" should confirm the status change.
@@ -1044,7 +1093,8 @@
                     body: JSON.stringify({ 
                         name: candidate.candidate_name || candidate.name, 
                         email: candidate.candidate_email || candidate.email,
-                        id: candidate.id 
+                        id: candidate.id,
+                        job_title: candidate.job_title || null
                     })
                 });
                 const data = await response.json();
@@ -1134,12 +1184,14 @@
         const copyLinkBtn = document.getElementById('copyLink');
         const rejectCandidateBtn = document.getElementById('rejectCandidateBtn');
         let currentScheduleCandidateId = null;
+        let currentScheduleJobTitle = null;
 
-        window.openScheduleModal = function(name, email, id) {
+        window.openScheduleModal = function(name, email, id, jobTitle) {
             document.getElementById('candidateName').value = name;
             document.getElementById('candidateEmail').value = email;
             currentScheduleCandidateId = id; // Store ID
-            document.getElementById('interviewTitle').value = `Interview with ${name}`;
+            currentScheduleJobTitle = jobTitle || null; // Store job title
+            document.getElementById('interviewTitle').value = `Interview with ${name}${jobTitle ? ' - ' + jobTitle : ''}`;
             
             // Load saved meeting link
             const savedLink = localStorage.getItem('defaultMeetingLink');
@@ -1242,7 +1294,8 @@
                             type: type,
                             meeting_link: meetingLink,
                             gcal_link: gcalUrl,
-                            date_display: dateDisplay
+                            date_display: dateDisplay,
+                            job_title: currentScheduleJobTitle
                         }
                     })
                 });
@@ -1294,7 +1347,12 @@
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({ name, email })
+                    body: JSON.stringify({ 
+                        name, 
+                        email,
+                        id: currentScheduleCandidateId,
+                        job_title: currentScheduleJobTitle
+                    })
                 });
 
                 const data = await response.json();
