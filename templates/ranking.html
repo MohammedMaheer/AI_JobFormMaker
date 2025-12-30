@@ -344,6 +344,16 @@
         
         let currentCandidates = []; // Store globally for switching views
 
+        // Helper function to ensure LinkedIn URL has proper protocol
+        function formatLinkedInUrl(url) {
+            if (!url) return '';
+            url = url.trim();
+            if (url.startsWith('http://') || url.startsWith('https://')) {
+                return url;
+            }
+            return 'https://' + url;
+        }
+
         // Load candidates on startup
         document.addEventListener('DOMContentLoaded', loadCandidates);
         refreshBtn.addEventListener('click', loadCandidates);
@@ -538,7 +548,7 @@
                         <div style="font-size: 1.2rem; font-weight: 500; color: var(--text-primary); display: flex; align-items: center; gap: 10px;">
                             <i class="fab fa-linkedin" style="color: #0077b5;"></i> 
                             ${candidate.linkedin_url ? 
-                                `<a href="${candidate.linkedin_url}" target="_blank" style="color: #0077b5; text-decoration: none; border-bottom: 1px dashed #0077b5; transition: all 0.2s;" onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'" title="View LinkedIn Profile">
+                                `<a href="${formatLinkedInUrl(candidate.linkedin_url)}" target="_blank" style="color: #0077b5; text-decoration: none; border-bottom: 1px dashed #0077b5; transition: all 0.2s;" onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'" title="View LinkedIn Profile">
                                     LinkedIn Profile <i class="fas fa-external-link-alt" style="font-size: 0.7em; margin-left: 5px; opacity: 0.7;"></i>
                                  </a>` : '<span style="color: var(--warning-color);">Not provided (-2 pts)</span>'}
                         </div>
@@ -596,9 +606,50 @@
             resultsSection.style.display = 'block';
             candidatesList.innerHTML = '';
             
+            if (candidates.length === 0) {
+                candidatesList.innerHTML = '<div class="empty-state"><i class="fas fa-users" style="font-size: 3rem; color: var(--text-secondary); margin-bottom: 1rem;"></i><p>No candidates found yet.</p></div>';
+                return;
+            }
+            
+            // Group candidates by job
+            const candidatesByJob = {};
+            candidates.forEach(candidate => {
+                const jobId = candidate.job_id || 'unknown';
+                const jobTitle = candidate.job_title || 'Unassigned Job';
+                if (!candidatesByJob[jobId]) {
+                    candidatesByJob[jobId] = { title: jobTitle, candidates: [] };
+                }
+                candidatesByJob[jobId].candidates.push(candidate);
+            });
+            
             const pendingIds = []; // Track pending candidates
-
-            candidates.forEach((candidate, index) => {
+            
+            // Render each job group
+            Object.keys(candidatesByJob).forEach(jobId => {
+                const group = candidatesByJob[jobId];
+                
+                // Create job section
+                const jobSection = document.createElement('div');
+                jobSection.className = 'job-group-section';
+                jobSection.style.cssText = 'margin-bottom: 2.5rem;';
+                
+                // Job header
+                const jobHeader = document.createElement('div');
+                jobHeader.className = 'job-group-header';
+                jobHeader.style.cssText = 'background: linear-gradient(135deg, var(--primary-color), var(--info-color)); color: white; padding: 1rem 1.5rem; border-radius: 12px; margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center;';
+                jobHeader.innerHTML = `
+                    <div>
+                        <h3 style="margin: 0; font-size: 1.1rem;"><i class="fas fa-briefcase" style="margin-right: 10px;"></i>${group.title}</h3>
+                        <small style="opacity: 0.9;">${group.candidates.length} candidate${group.candidates.length !== 1 ? 's' : ''}</small>
+                    </div>
+                    ${jobId !== 'unknown' ? `<a href="/job/${jobId}" class="btn btn-sm" style="background: rgba(255,255,255,0.2); color: white; border: 1px solid rgba(255,255,255,0.3);"><i class="fas fa-external-link-alt"></i> View Job</a>` : ''}
+                `;
+                jobSection.appendChild(jobHeader);
+                
+                // Sort candidates within job by score
+                group.candidates.sort((a, b) => (b.total_score || 0) - (a.total_score || 0));
+                
+                group.candidates.forEach((candidate, index) => {
                 let scoreClass = candidate.total_score >= 80 ? 'score-high' : 
                                  candidate.total_score >= 60 ? 'score-medium' : 'score-low';
                 
@@ -647,7 +698,7 @@
                             </div>
                             <div style="font-size: 0.9rem; margin-top: 2px;">
                                 ${candidate.linkedin_url ? 
-                                    `<a href="${candidate.linkedin_url}" target="_blank" style="color: #0077b5; text-decoration: none;"><i class="fab fa-linkedin"></i> LinkedIn</a>` : 
+                                    `<a href="${formatLinkedInUrl(candidate.linkedin_url)}" target="_blank" style="color: #0077b5; text-decoration: none;"><i class="fab fa-linkedin"></i> LinkedIn</a>` : 
                                     `<span style="color: var(--warning-color);"><i class="fab fa-linkedin"></i> Not provided</span>`}
                             </div>
                         </div>
@@ -677,7 +728,10 @@
                         Click to view full details
                     </div>
                 `;
-                candidatesList.appendChild(card);
+                jobSection.appendChild(card);
+            });
+            
+            candidatesList.appendChild(jobSection);
             });
 
             // Auto-process pending candidates

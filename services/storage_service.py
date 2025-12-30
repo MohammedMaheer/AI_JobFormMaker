@@ -109,6 +109,16 @@ class StorageService:
                     if not cursor.fetchone():
                         cursor.execute("ALTER TABLE candidates ADD COLUMN linkedin_url TEXT")
                     
+                    # Add notes column
+                    cursor.execute("SELECT column_name FROM information_schema.columns WHERE table_name='candidates' AND column_name='notes'")
+                    if not cursor.fetchone():
+                        cursor.execute("ALTER TABLE candidates ADD COLUMN notes TEXT")
+                    
+                    # Add tags column
+                    cursor.execute("SELECT column_name FROM information_schema.columns WHERE table_name='candidates' AND column_name='tags'")
+                    if not cursor.fetchone():
+                        cursor.execute("ALTER TABLE candidates ADD COLUMN tags TEXT")
+                    
                     # Check for edit_url in jobs
                     cursor.execute("SELECT column_name FROM information_schema.columns WHERE table_name='jobs' AND column_name='edit_url'")
                     if not cursor.fetchone():
@@ -121,6 +131,10 @@ class StorageService:
                         cursor.execute("ALTER TABLE candidates ADD COLUMN job_id TEXT")
                     if 'linkedin_url' not in columns:
                         cursor.execute("ALTER TABLE candidates ADD COLUMN linkedin_url TEXT")
+                    if 'notes' not in columns:
+                        cursor.execute("ALTER TABLE candidates ADD COLUMN notes TEXT")
+                    if 'tags' not in columns:
+                        cursor.execute("ALTER TABLE candidates ADD COLUMN tags TEXT")
                         
                     # Check for edit_url in jobs
                     cursor.execute("PRAGMA table_info(jobs)")
@@ -301,15 +315,20 @@ class StorageService:
             cursor = conn.cursor(cursor_factory=RealDictCursor)
         else:
             cursor = conn.cursor()
-            
-        query = 'SELECT * FROM candidates'
+        
+        # JOIN with jobs table to get job_title
+        query = '''
+            SELECT c.*, j.title as job_title 
+            FROM candidates c 
+            LEFT JOIN jobs j ON c.job_id = j.id
+        '''
         params = []
         
         if job_id:
-            query += ' WHERE job_id = %s' if self.is_postgres else ' WHERE job_id = ?'
+            query += ' WHERE c.job_id = %s' if self.is_postgres else ' WHERE c.job_id = ?'
             params.append(job_id)
             
-        query += ' ORDER BY timestamp DESC'
+        query += ' ORDER BY c.timestamp DESC'
         
         cursor.execute(query, tuple(params))
         rows = cursor.fetchall()
@@ -366,6 +385,19 @@ class StorageService:
             # Ensure total_score is present
             if 'total_score' not in cand and cand.get('score'):
                 cand['total_score'] = cand['score']
+            
+            # Parse tags JSON if present
+            if cand.get('tags'):
+                try:
+                    cand['tags'] = json.loads(cand['tags'])
+                except:
+                    cand['tags'] = []
+            else:
+                cand['tags'] = []
+            
+            # Notes is already a string, just ensure it exists
+            if not cand.get('notes'):
+                cand['notes'] = ''
                 
             candidates.append(cand)
         
@@ -602,3 +634,42 @@ class StorageService:
             'target_job_id': target_job['id'],
             'message': f'Fixed {fixed_count} orphan candidates'
         }
+
+    def update_candidate_notes(self, candidate_id: str, notes: str) -> bool:
+        """Update notes for a candidate"""
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        
+        try:
+            if self.is_postgres:
+                cursor.execute('UPDATE candidates SET notes = %s WHERE id = %s', (notes, candidate_id))
+            else:
+                cursor.execute('UPDATE candidates SET notes = ? WHERE id = ?', (notes, candidate_id))
+            
+            conn.commit()
+            conn.close()
+            return True
+        except Exception as e:
+            print(f"Error updating notes: {e}")
+            conn.close()
+            return False
+
+    def update_candidate_tags(self, candidate_id: str, tags: list) -> bool:
+        """Update tags for a candidate"""
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        
+        try:
+            tags_json = json.dumps(tags)
+            if self.is_postgres:
+                cursor.execute('UPDATE candidates SET tags = %s WHERE id = %s', (tags_json, candidate_id))
+            else:
+                cursor.execute('UPDATE candidates SET tags = ? WHERE id = ?', (tags_json, candidate_id))
+            
+            conn.commit()
+            conn.close()
+            return True
+        except Exception as e:
+            print(f"Error updating tags: {e}")
+            conn.close()
+            return False

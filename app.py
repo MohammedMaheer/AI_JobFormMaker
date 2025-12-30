@@ -1143,6 +1143,36 @@ def update_candidate_status(candidate_id):
     else:
         return jsonify({'success': False, 'error': 'Failed to update status'}), 500
 
+
+@app.route('/api/candidates/<candidate_id>/notes', methods=['POST'])
+def update_candidate_notes(candidate_id):
+    """Update candidate notes"""
+    data = request.json
+    notes = data.get('notes', '')
+    
+    success = storage_service.update_candidate_notes(candidate_id, notes)
+    if success:
+        return jsonify({'success': True})
+    else:
+        return jsonify({'success': False, 'error': 'Failed to update notes'}), 500
+
+
+@app.route('/api/candidates/<candidate_id>/tags', methods=['POST'])
+def update_candidate_tags(candidate_id):
+    """Update candidate tags"""
+    data = request.json
+    tags = data.get('tags', [])
+    
+    if not isinstance(tags, list):
+        return jsonify({'success': False, 'error': 'Tags must be an array'}), 400
+    
+    success = storage_service.update_candidate_tags(candidate_id, tags)
+    if success:
+        return jsonify({'success': True})
+    else:
+        return jsonify({'success': False, 'error': 'Failed to update tags'}), 500
+
+
 @app.route('/api/reject', methods=['POST'])
 def reject_candidate():
     """Send rejection email to candidate"""

@@ -194,9 +194,9 @@
 
             <!-- Dashboard Controls -->
             <section class="card" style="margin-bottom: 2rem;">
-                <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+                <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
                     <h2>Candidates</h2>
-                    <div>
+                    <div class="header-actions">
                         <button id="view-toggle-btn" class="btn btn-secondary" style="margin-right: 10px;">
                             <i class="fas fa-columns"></i> Kanban View
                         </button>
@@ -204,6 +204,35 @@
                             <i class="fas fa-sync-alt"></i> Refresh Candidates
                         </button>
                     </div>
+                </div>
+                
+                <!-- Search & Filter Bar -->
+                <div class="filter-bar" style="padding: 1rem; border-top: 1px solid var(--border-color); display: flex; flex-wrap: wrap; gap: 1rem; align-items: center;">
+                    <div class="filter-group" style="flex: 1; min-width: 200px;">
+                        <input type="text" id="search-input" class="form-control" placeholder="🔍 Search by name, email, or skills..." style="width: 100%;">
+                    </div>
+                    <div class="filter-group" style="display: flex; gap: 0.5rem; align-items: center;">
+                        <label style="color: var(--text-secondary); white-space: nowrap;">Score:</label>
+                        <input type="number" id="score-min" class="form-control" placeholder="Min" min="0" max="100" style="width: 70px;">
+                        <span style="color: var(--text-secondary);">-</span>
+                        <input type="number" id="score-max" class="form-control" placeholder="Max" min="0" max="100" style="width: 70px;">
+                    </div>
+                    <div class="filter-group">
+                        <select id="status-filter" class="form-control" style="min-width: 130px;">
+                            <option value="">All Status</option>
+                            <option value="applied">Applied</option>
+                            <option value="interview_scheduled">Interview</option>
+                            <option value="rejected">Rejected</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <select id="tag-filter" class="form-control" style="min-width: 120px;">
+                            <option value="">All Tags</option>
+                        </select>
+                    </div>
+                    <button id="clear-filters-btn" class="btn btn-outline btn-sm" style="white-space: nowrap;">
+                        <i class="fas fa-times"></i> Clear
+                    </button>
                 </div>
             </section>
 

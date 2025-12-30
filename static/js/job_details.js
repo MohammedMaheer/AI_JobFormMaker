@@ -3,6 +3,16 @@
 let currentCandidates = [];
 let isKanbanView = false;
 
+// Helper function to ensure LinkedIn URL has proper protocol
+function formatLinkedInUrl(url) {
+    if (!url) return '';
+    url = url.trim();
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+        return url;
+    }
+    return 'https://' + url;
+}
+
 // DOM Elements
 const candidatesList = document.getElementById('candidates-list');
 const resultsSection = document.getElementById('results-section');
@@ -58,7 +68,186 @@ document.addEventListener('DOMContentLoaded', () => {
             scheduleModal.style.display = "none";
         }
     }
+    
+    // Search & Filter Event Listeners
+    initializeFilters();
 });
+
+// Filter state
+let filterState = {
+    search: '',
+    scoreMin: null,
+    scoreMax: null,
+    status: '',
+    tag: ''
+};
+
+function initializeFilters() {
+    const searchInput = document.getElementById('search-input');
+    const scoreMin = document.getElementById('score-min');
+    const scoreMax = document.getElementById('score-max');
+    const statusFilter = document.getElementById('status-filter');
+    const tagFilter = document.getElementById('tag-filter');
+    const clearBtn = document.getElementById('clear-filters-btn');
+    
+    if (searchInput) {
+        searchInput.addEventListener('input', debounce((e) => {
+            filterState.search = e.target.value.toLowerCase();
+            applyFilters();
+        }, 300));
+    }
+    
+    if (scoreMin) {
+        scoreMin.addEventListener('input', () => {
+            filterState.scoreMin = scoreMin.value ? parseInt(scoreMin.value) : null;
+            applyFilters();
+        });
+    }
+    
+    if (scoreMax) {
+        scoreMax.addEventListener('input', () => {
+            filterState.scoreMax = scoreMax.value ? parseInt(scoreMax.value) : null;
+            applyFilters();
+        });
+    }
+    
+    if (statusFilter) {
+        statusFilter.addEventListener('change', () => {
+            filterState.status = statusFilter.value;
+            applyFilters();
+        });
+    }
+    
+    if (tagFilter) {
+        tagFilter.addEventListener('change', () => {
+            filterState.tag = tagFilter.value;
+            applyFilters();
+        });
+    }
+    
+    if (clearBtn) {
+        clearBtn.addEventListener('click', clearFilters);
+    }
+}
+
+function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
+}
+
+function clearFilters() {
+    filterState = { search: '', scoreMin: null, scoreMax: null, status: '', tag: '' };
+    
+    const searchInput = document.getElementById('search-input');
+    const scoreMin = document.getElementById('score-min');
+    const scoreMax = document.getElementById('score-max');
+    const statusFilter = document.getElementById('status-filter');
+    const tagFilter = document.getElementById('tag-filter');
+    
+    if (searchInput) searchInput.value = '';
+    if (scoreMin) scoreMin.value = '';
+    if (scoreMax) scoreMax.value = '';
+    if (statusFilter) statusFilter.value = '';
+    if (tagFilter) tagFilter.value = '';
+    
+    applyFilters();
+}
+
+function applyFilters() {
+    let filtered = [...currentCandidates];
+    
+    // Search filter (name, email, skills)
+    if (filterState.search) {
+        filtered = filtered.filter(c => {
+            const name = (c.candidate_name || c.name || '').toLowerCase();
+            const email = (c.candidate_email || c.email || '').toLowerCase();
+            const skills = (c.ai_analysis?.summary || c.feedback || '').toLowerCase();
+            const tags = (c.tags || []).join(' ').toLowerCase();
+            return name.includes(filterState.search) || 
+                   email.includes(filterState.search) || 
+                   skills.includes(filterState.search) ||
+                   tags.includes(filterState.search);
+        });
+    }
+    
+    // Score range filter
+    if (filterState.scoreMin !== null) {
+        filtered = filtered.filter(c => (c.total_score || 0) >= filterState.scoreMin);
+    }
+    if (filterState.scoreMax !== null) {
+        filtered = filtered.filter(c => (c.total_score || 0) <= filterState.scoreMax);
+    }
+    
+    // Status filter
+    if (filterState.status) {
+        filtered = filtered.filter(c => {
+            let status = c.status || 'applied';
+            if (status === 'processed' || status === 'pending') status = 'applied';
+            return status === filterState.status;
+        });
+    }
+    
+    // Tag filter
+    if (filterState.tag) {
+        filtered = filtered.filter(c => (c.tags || []).includes(filterState.tag));
+    }
+    
+    // Update display
+    if (isKanbanView) {
+        renderKanbanBoard(filtered);
+    } else {
+        displayResults(filtered);
+    }
+    
+    // Show filter results count
+    updateFilterResultsCount(filtered.length, currentCandidates.length);
+}
+
+function updateFilterResultsCount(shown, total) {
+    const existingBadge = document.getElementById('filter-results-badge');
+    if (existingBadge) existingBadge.remove();
+    
+    if (shown !== total) {
+        const badge = document.createElement('span');
+        badge.id = 'filter-results-badge';
+        badge.style.cssText = 'background: var(--primary-color); color: white; padding: 4px 10px; border-radius: 20px; font-size: 0.85rem; margin-left: 10px;';
+        badge.textContent = `Showing ${shown} of ${total}`;
+        
+        const header = document.querySelector('.card-header h2');
+        if (header) header.appendChild(badge);
+    }
+}
+
+function updateTagFilter() {
+    const tagFilter = document.getElementById('tag-filter');
+    if (!tagFilter) return;
+    
+    // Collect all unique tags
+    const allTags = new Set();
+    currentCandidates.forEach(c => {
+        (c.tags || []).forEach(tag => allTags.add(tag));
+    });
+    
+    // Keep current selection
+    const currentValue = tagFilter.value;
+    
+    // Rebuild options
+    tagFilter.innerHTML = '<option value="">All Tags</option>';
+    Array.from(allTags).sort().forEach(tag => {
+        const option = document.createElement('option');
+        option.value = tag;
+        option.textContent = tag;
+        if (tag === currentValue) option.selected = true;
+        tagFilter.appendChild(option);
+    });
+}
 
 async function loadJobDetails() {
     try {
@@ -186,11 +375,11 @@ async function loadCandidates() {
             const sorted = data.candidates.sort((a, b) => (b.total_score || 0) - (a.total_score || 0));
             currentCandidates = sorted;
             
-            if (isKanbanView) {
-                renderKanbanBoard(currentCandidates);
-            } else {
-                displayResults(currentCandidates);
-            }
+            // Update tag filter dropdown with available tags
+            updateTagFilter();
+            
+            // Apply any active filters
+            applyFilters();
         } else {
             currentCandidates = [];
             displayResults([]);
@@ -482,6 +671,7 @@ async function rejectCandidateKanban(candidate) {
 }
 
 function openCandidateModal(candidate) {
+    currentModalCandidateId = candidate.id; // Store for tag operations
     modalCandidateName.textContent = candidate.candidate_name || candidate.name || 'Candidate Details';
     
     let scoreClass = candidate.total_score >= 80 ? 'score-high' : 
@@ -589,12 +779,176 @@ function openCandidateModal(candidate) {
             ${consHtml}
         </div>
 
+        <!-- Tags Section -->
+        <div style="margin-bottom: 25px; background: rgba(255, 255, 255, 0.02); padding: 20px; border-radius: 16px; border: 1px solid var(--border-color);">
+            <h4 style="color: var(--text-primary); margin-bottom: 15px; font-size: 1.1rem;">
+                <i class="fas fa-tags" style="margin-right: 10px; color: var(--warning-color);"></i> Tags
+            </h4>
+            <div id="modal-tags-container" style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 15px;">
+                ${renderTags(candidate.tags || [])}
+            </div>
+            <div style="display: flex; gap: 10px;">
+                <input type="text" id="modal-new-tag" class="form-control" placeholder="Add new tag..." 
+                    style="flex: 1; padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 6px; background: var(--bg-color); color: var(--text-primary);"
+                    onkeypress="if(event.key==='Enter'){event.preventDefault(); addTagFromModal('${candidate.id}');}">
+                <button class="btn btn-sm btn-primary" onclick="addTagFromModal('${candidate.id}')" style="padding: 8px 16px;">
+                    <i class="fas fa-plus"></i> Add
+                </button>
+            </div>
+            <div style="margin-top: 10px; display: flex; flex-wrap: wrap; gap: 5px;">
+                <small style="color: var(--text-secondary); margin-right: 5px;">Quick add:</small>
+                <button class="quick-tag-btn" onclick="quickAddTag('${candidate.id}', 'Senior')">Senior</button>
+                <button class="quick-tag-btn" onclick="quickAddTag('${candidate.id}', 'Junior')">Junior</button>
+                <button class="quick-tag-btn" onclick="quickAddTag('${candidate.id}', 'Remote OK')">Remote OK</button>
+                <button class="quick-tag-btn" onclick="quickAddTag('${candidate.id}', 'Top Pick')">⭐ Top Pick</button>
+                <button class="quick-tag-btn" onclick="quickAddTag('${candidate.id}', 'Needs Follow-up')">Needs Follow-up</button>
+            </div>
+        </div>
+
+        <!-- Notes Section -->
+        <div style="margin-bottom: 25px; background: rgba(255, 255, 255, 0.02); padding: 20px; border-radius: 16px; border: 1px solid var(--border-color);">
+            <h4 style="color: var(--text-primary); margin-bottom: 15px; font-size: 1.1rem;">
+                <i class="fas fa-sticky-note" style="margin-right: 10px; color: var(--info-color);"></i> Internal Notes
+            </h4>
+            <textarea id="modal-notes" class="form-control" rows="4" placeholder="Add internal notes about this candidate..."
+                style="width: 100%; padding: 12px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-color); color: var(--text-primary); resize: vertical;">${candidate.notes || ''}</textarea>
+            <div style="display: flex; justify-content: flex-end; margin-top: 10px;">
+                <button class="btn btn-sm btn-primary" onclick="saveNotes('${candidate.id}')" id="save-notes-btn">
+                    <i class="fas fa-save"></i> Save Notes
+                </button>
+            </div>
+        </div>
+
         <div style="margin-top: 20px; text-align: right; border-top: 1px solid var(--border-color); padding-top: 20px;">
             ${viewResumeBtn}
         </div>
     `;
 
     candidateModal.classList.add('active');
+}
+
+// Helper function to render tags
+function renderTags(tags) {
+    if (!tags || tags.length === 0) {
+        return '<span style="color: var(--text-secondary); font-style: italic;">No tags yet</span>';
+    }
+    return tags.map(tag => `
+        <span class="candidate-tag" style="background: linear-gradient(135deg, var(--primary-color), var(--info-color)); color: white; padding: 4px 12px; border-radius: 20px; font-size: 0.85rem; display: inline-flex; align-items: center; gap: 6px;">
+            ${tag}
+            <button onclick="removeTag('${currentModalCandidateId}', '${tag}')" style="background: none; border: none; color: white; cursor: pointer; padding: 0; line-height: 1; opacity: 0.8;" title="Remove tag">
+                <i class="fas fa-times" style="font-size: 0.7rem;"></i>
+            </button>
+        </span>
+    `).join('');
+}
+
+// Store current modal candidate ID
+let currentModalCandidateId = null;
+
+// Tags Functions
+async function addTagFromModal(candidateId) {
+    const input = document.getElementById('modal-new-tag');
+    const tag = input.value.trim();
+    if (!tag) return;
+    
+    await addTag(candidateId, tag);
+    input.value = '';
+}
+
+async function quickAddTag(candidateId, tag) {
+    await addTag(candidateId, tag);
+}
+
+async function addTag(candidateId, tag) {
+    const candidate = currentCandidates.find(c => c.id === candidateId);
+    if (!candidate) return;
+    
+    const currentTags = candidate.tags || [];
+    if (currentTags.includes(tag)) {
+        alert('Tag already exists!');
+        return;
+    }
+    
+    const newTags = [...currentTags, tag];
+    
+    try {
+        const response = await fetch(`/api/candidates/${candidateId}/tags`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tags: newTags })
+        });
+        const data = await response.json();
+        if (data.success) {
+            candidate.tags = newTags;
+            document.getElementById('modal-tags-container').innerHTML = renderTags(newTags);
+            updateTagFilter(); // Update the filter dropdown
+        } else {
+            alert('Failed to add tag: ' + data.error);
+        }
+    } catch (e) {
+        console.error('Error adding tag:', e);
+        alert('Failed to add tag');
+    }
+}
+
+async function removeTag(candidateId, tagToRemove) {
+    const candidate = currentCandidates.find(c => c.id === candidateId);
+    if (!candidate) return;
+    
+    const newTags = (candidate.tags || []).filter(t => t !== tagToRemove);
+    
+    try {
+        const response = await fetch(`/api/candidates/${candidateId}/tags`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tags: newTags })
+        });
+        const data = await response.json();
+        if (data.success) {
+            candidate.tags = newTags;
+            document.getElementById('modal-tags-container').innerHTML = renderTags(newTags);
+            updateTagFilter();
+        }
+    } catch (e) {
+        console.error('Error removing tag:', e);
+    }
+}
+
+// Notes Functions
+async function saveNotes(candidateId) {
+    const notesArea = document.getElementById('modal-notes');
+    const saveBtn = document.getElementById('save-notes-btn');
+    const notes = notesArea.value;
+    
+    saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+    saveBtn.disabled = true;
+    
+    try {
+        const response = await fetch(`/api/candidates/${candidateId}/notes`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ notes })
+        });
+        const data = await response.json();
+        if (data.success) {
+            const candidate = currentCandidates.find(c => c.id === candidateId);
+            if (candidate) candidate.notes = notes;
+            saveBtn.innerHTML = '<i class="fas fa-check"></i> Saved!';
+            setTimeout(() => {
+                saveBtn.innerHTML = '<i class="fas fa-save"></i> Save Notes';
+                saveBtn.disabled = false;
+            }, 2000);
+        } else {
+            throw new Error(data.error);
+        }
+    } catch (e) {
+        console.error('Error saving notes:', e);
+        saveBtn.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Error';
+        setTimeout(() => {
+            saveBtn.innerHTML = '<i class="fas fa-save"></i> Save Notes';
+            saveBtn.disabled = false;
+        }, 2000);
+    }
 }
 
 // Schedule Modal Logic
