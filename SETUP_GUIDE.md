@@ -135,28 +135,41 @@ Run the app - it will now use your Neon database.
 
 ---
 
-## 4. Redis Caching Setup (Upstash)
+## 4. Redis Caching Setup (Upstash) - OPTIONAL
+
+> ⚠️ **This step is completely optional!** Your app works perfectly without Redis.
+> 
+> **Without Redis:** Uses in-memory caching (works great for development and small deployments)
+> 
+> **With Redis:** Faster responses, cache persists across serverless function restarts (recommended for production)
 
 Upstash provides **free serverless Redis** that works perfectly with Vercel. This makes your API responses 10-50x faster.
 
-> **Note:** This is optional! The app falls back to in-memory caching if Redis is not configured.
+### Skip This Section If:
+- You're just testing locally
+- You don't need persistent caching
+- You want to set it up later
+
+The app automatically falls back to in-memory caching if Redis is not configured.
+
+---
 
 ### Step 1: Create Upstash Account
 
 1. Go to [Upstash Console](https://console.upstash.com/)
-2. Sign up (free tier = 10,000 commands/day)
+2. Sign up with GitHub/Google (free tier = 10,000 commands/day)
 
 ### Step 2: Create a Redis Database
 
 1. Click **"Create Database"**
 2. Name: `recruitment-cache`
-3. Region: Choose closest to your Vercel deployment
+3. Region: Choose closest to your Vercel deployment (e.g., `ap-southeast-1` for Singapore)
 4. Type: **Regional** (free tier)
 
 ### Step 3: Get Credentials
 
-1. On the database page, find **"REST API"** section
-2. Copy these values:
+1. On the database page, scroll to **"REST API"** section
+2. Copy these two values:
    - `UPSTASH_REDIS_REST_URL`
    - `UPSTASH_REDIS_REST_TOKEN`
 
@@ -164,7 +177,8 @@ Upstash provides **free serverless Redis** that works perfectly with Vercel. Thi
 
 **For Local Development** (`.env`):
 ```ini
-UPSTASH_REDIS_REST_URL=https://xxx.upstash.io
+# Upstash Redis (OPTIONAL - for caching)
+UPSTASH_REDIS_REST_URL=https://your-database.upstash.io
 UPSTASH_REDIS_REST_TOKEN=AXxxxx...
 ```
 
@@ -184,7 +198,7 @@ UPSTASH_REDIS_REST_TOKEN=AXxxxx...
 Check `/api/health` endpoint:
 ```json
 {
-  "cache": "redis",  // or "memory" if not configured
+  "cache": "redis",  // Shows "memory" if Redis not configured
   "status": "healthy"
 }
 ```
