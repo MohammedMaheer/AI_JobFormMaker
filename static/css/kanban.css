@@ -125,7 +125,7 @@
 
 .kanban-card-details {
     font-size: 0.85rem;
-    color: var(--text-secondary);
+    color: #c8c8cd;
     margin-bottom: 10px;
 }
 
@@ -146,5 +146,5 @@
 
 .kanban-card-date {
     font-size: 0.75rem;
-    color: var(--text-secondary);
+    color: #b0b0b5;
 }
