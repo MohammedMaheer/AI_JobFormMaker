@@ -637,13 +637,28 @@
                 const jobHeader = document.createElement('div');
                 jobHeader.className = 'job-group-header';
                 jobHeader.style.cssText = 'background: linear-gradient(135deg, var(--primary-color), var(--info-color)); color: white; padding: 1rem 1.5rem; border-radius: 12px; margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center;';
+                // Check if this is an orphan job group
+                const isOrphan = jobId === 'unknown' || !group.title || group.title === 'Unassigned Job';
+                
                 jobHeader.innerHTML = `
                     <div>
-                        <h3 style="margin: 0; font-size: 1.1rem;"><i class="fas fa-briefcase" style="margin-right: 10px;"></i>${group.title}</h3>
-                        <small style="opacity: 0.9;">${group.candidates.length} candidate${group.candidates.length !== 1 ? 's' : ''}</small>
+                        <h3 style="margin: 0; font-size: 1.1rem;">
+                            <i class="fas ${isOrphan ? 'fa-exclamation-triangle' : 'fa-briefcase'}" style="margin-right: 10px;"></i>
+                            ${isOrphan ? '⚠️ Unassigned Candidates' : group.title}
+                        </h3>
+                        <small style="opacity: 0.9;">${group.candidates.length} candidate${group.candidates.length !== 1 ? 's' : ''}${isOrphan ? ' - Need assignment to a job' : ''}</small>
                     </div>
-                    ${jobId !== 'unknown' ? `<a href="/job/${jobId}" class="btn btn-sm" style="background: rgba(255,255,255,0.2); color: white; border: 1px solid rgba(255,255,255,0.3);"><i class="fas fa-external-link-alt"></i> View Job</a>` : ''}
+                    <div style="display: flex; gap: 8px;">
+                        ${isOrphan ? `<button onclick="reassignOrphanCandidates()" class="btn btn-sm" style="background: rgba(255,255,255,0.3); color: white; border: 1px solid rgba(255,255,255,0.5);"><i class="fas fa-link"></i> Assign to Job</button>` : ''}
+                        ${jobId !== 'unknown' && !isOrphan ? `<a href="/job/${jobId}" class="btn btn-sm" style="background: rgba(255,255,255,0.2); color: white; border: 1px solid rgba(255,255,255,0.3);"><i class="fas fa-external-link-alt"></i> View Job</a>` : ''}
+                    </div>
                 `;
+                
+                // Style orphan header differently
+                if (isOrphan) {
+                    jobHeader.style.background = 'linear-gradient(135deg, #f59e0b, #d97706)';
+                }
+                
                 jobSection.appendChild(jobHeader);
                 
                 // Sort candidates within job by score
@@ -789,6 +804,57 @@
             } catch (e) {
                 console.error(e);
                 alert('Failed to process candidate.');
+            }
+        }
+
+        // Reassign orphan candidates to a job
+        async function reassignOrphanCandidates() {
+            // First, get list of available jobs
+            try {
+                const jobsResponse = await fetch('/api/jobs');
+                const jobsData = await jobsResponse.json();
+                
+                if (!jobsData.jobs || jobsData.jobs.length === 0) {
+                    alert('No jobs available. Please create a job first.');
+                    return;
+                }
+                
+                // Build selection options
+                const activeJobs = jobsData.jobs.filter(j => j.status === 'active');
+                if (activeJobs.length === 0) {
+                    alert('No active jobs available. Please create or activate a job first.');
+                    return;
+                }
+                
+                let jobOptions = activeJobs.map(j => `${j.title} (ID: ${j.id.substring(0, 8)}...)`).join('\n');
+                let selectedTitle = prompt(`Select a job to assign orphan candidates to:\n\n${jobOptions}\n\nEnter the job title:`);
+                
+                if (!selectedTitle) return;
+                
+                // Find the matching job
+                const selectedJob = activeJobs.find(j => j.title.toLowerCase().includes(selectedTitle.toLowerCase()));
+                if (!selectedJob) {
+                    alert('Job not found. Please enter the exact title.');
+                    return;
+                }
+                
+                // Call the fix-orphans endpoint
+                const response = await fetch('/api/candidates/fix-orphans', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ job_id: selectedJob.id })
+                });
+                
+                const data = await response.json();
+                if (data.success) {
+                    alert(`Success! ${data.message}`);
+                    loadCandidates();
+                } else {
+                    alert('Error: ' + (data.error || data.message));
+                }
+            } catch (e) {
+                console.error(e);
+                alert('Failed to reassign candidates.');
             }
         }
 

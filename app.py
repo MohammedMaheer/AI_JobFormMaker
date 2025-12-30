@@ -763,7 +763,20 @@ def webhook_application():
         if job_id:
             data['job_id'] = job_id
         else:
-            print("⚠️ WARNING: No job_id assigned to this application!")
+            # CRITICAL: Prevent orphan candidates by assigning to most recent active job
+            print("⚠️ WARNING: No job_id found - attempting to assign to most recent active job...")
+            all_jobs = storage_service.get_all_jobs()
+            active_jobs = [j for j in all_jobs if j.get('status') == 'active']
+            if active_jobs:
+                # Sort by created_at descending and take the most recent
+                active_jobs.sort(key=lambda x: x.get('created_at', ''), reverse=True)
+                job_id = active_jobs[0]['id']
+                data['job_id'] = job_id
+                if active_jobs[0].get('description'):
+                    data['job_description'] = active_jobs[0]['description']
+                print(f"✓ Auto-assigned to most recent active job: {job_id} ({active_jobs[0].get('title', 'Unknown')})")
+            else:
+                print("❌ CRITICAL: No active jobs available! Application will be orphaned.")
         
         # Check for duplicates (debounce) - now includes job_id
         email = data.get('email')
@@ -808,6 +821,25 @@ def save_pending_application(data):
         job_description = data.get('job_description', '')
         answers = data.get('answers', {})
         job_id = data.get('job_id')
+        
+        # VALIDATION: Ensure job_id is present and valid
+        if not job_id:
+            print("❌ ERROR: Attempting to save candidate without job_id!")
+            # Try to find an active job as fallback
+            all_jobs = storage_service.get_all_jobs()
+            active_jobs = [j for j in all_jobs if j.get('status') == 'active']
+            if active_jobs:
+                active_jobs.sort(key=lambda x: x.get('created_at', ''), reverse=True)
+                job_id = active_jobs[0]['id']
+                print(f"✓ Fallback: Assigned to job {job_id}")
+            else:
+                print("❌ No jobs available - candidate will have no job_id")
+        
+        # Validate that job exists
+        if job_id:
+            job = storage_service.get_job(job_id)
+            if not job:
+                print(f"⚠️ WARNING: job_id '{job_id}' does not exist in database!")
         
         # Create a basic candidate object
         candidate_data = {
