@@ -574,6 +574,150 @@ class StorageService:
                 
         return None
 
+    def check_duplicate_application(self, email: str = None, phone: str = None, job_id: str = None) -> Optional[Dict]:
+        """
+        Check if a candidate has already applied to this job.
+        Returns the existing candidate record if duplicate found, None otherwise.
+        
+        Checks for duplicates based on:
+        1. Same email for the same job
+        2. Same phone number for the same job (if email not provided)
+        """
+        if not job_id:
+            return None
+            
+        if not email and not phone:
+            return None
+        
+        conn = self._get_connection()
+        
+        try:
+            if self.is_postgres:
+                cursor = conn.cursor(cursor_factory=RealDictCursor)
+                
+                # Check by email first (primary identifier)
+                if email:
+                    cursor.execute('''
+                        SELECT * FROM candidates 
+                        WHERE LOWER(email) = LOWER(%s) AND job_id = %s
+                        ORDER BY timestamp DESC LIMIT 1
+                    ''', (email, job_id))
+                    row = cursor.fetchone()
+                    if row:
+                        conn.close()
+                        return dict(row)
+                
+                # Check by phone if no email match
+                if phone:
+                    # Normalize phone (remove spaces, dashes, etc.)
+                    normalized_phone = ''.join(filter(str.isdigit, phone))
+                    if len(normalized_phone) >= 10:
+                        cursor.execute('''
+                            SELECT * FROM candidates 
+                            WHERE REGEXP_REPLACE(phone, '[^0-9]', '', 'g') LIKE %s AND job_id = %s
+                            ORDER BY timestamp DESC LIMIT 1
+                        ''', (f'%{normalized_phone[-10:]}', job_id))
+                        row = cursor.fetchone()
+                        if row:
+                            conn.close()
+                            return dict(row)
+            else:
+                cursor = conn.cursor()
+                
+                # Check by email first
+                if email:
+                    cursor.execute('''
+                        SELECT * FROM candidates 
+                        WHERE LOWER(email) = LOWER(?) AND job_id = ?
+                        ORDER BY timestamp DESC LIMIT 1
+                    ''', (email, job_id))
+                    row = cursor.fetchone()
+                    if row:
+                        conn.close()
+                        return dict(row)
+                
+                # Check by phone if no email match
+                if phone:
+                    cursor.execute('''
+                        SELECT * FROM candidates WHERE job_id = ?
+                    ''', (job_id,))
+                    rows = cursor.fetchall()
+                    
+                    normalized_phone = ''.join(filter(str.isdigit, phone))
+                    if len(normalized_phone) >= 10:
+                        for row in rows:
+                            row_dict = dict(row)
+                            existing_phone = row_dict.get('phone', '')
+                            if existing_phone:
+                                existing_normalized = ''.join(filter(str.isdigit, existing_phone))
+                                # Match last 10 digits
+                                if existing_normalized[-10:] == normalized_phone[-10:]:
+                                    conn.close()
+                                    return row_dict
+            
+            conn.close()
+            return None
+            
+        except Exception as e:
+            print(f"Error checking duplicate: {e}")
+            conn.close()
+            return None
+
+    def get_duplicate_stats(self, job_id: str = None) -> Dict:
+        """Get statistics about duplicate applications"""
+        conn = self._get_connection()
+        
+        try:
+            if self.is_postgres:
+                cursor = conn.cursor(cursor_factory=RealDictCursor)
+                if job_id:
+                    cursor.execute('''
+                        SELECT email, COUNT(*) as count 
+                        FROM candidates 
+                        WHERE job_id = %s AND email IS NOT NULL AND email != ''
+                        GROUP BY LOWER(email) 
+                        HAVING COUNT(*) > 1
+                    ''', (job_id,))
+                else:
+                    cursor.execute('''
+                        SELECT email, job_id, COUNT(*) as count 
+                        FROM candidates 
+                        WHERE email IS NOT NULL AND email != ''
+                        GROUP BY LOWER(email), job_id 
+                        HAVING COUNT(*) > 1
+                    ''')
+            else:
+                cursor = conn.cursor()
+                if job_id:
+                    cursor.execute('''
+                        SELECT email, COUNT(*) as count 
+                        FROM candidates 
+                        WHERE job_id = ? AND email IS NOT NULL AND email != ''
+                        GROUP BY LOWER(email) 
+                        HAVING COUNT(*) > 1
+                    ''', (job_id,))
+                else:
+                    cursor.execute('''
+                        SELECT email, job_id, COUNT(*) as count 
+                        FROM candidates 
+                        WHERE email IS NOT NULL AND email != ''
+                        GROUP BY LOWER(email), job_id 
+                        HAVING COUNT(*) > 1
+                    ''')
+            
+            rows = cursor.fetchall()
+            conn.close()
+            
+            return {
+                'duplicate_emails': [dict(r) for r in rows],
+                'total_duplicates': len(rows)
+            }
+            
+        except Exception as e:
+            print(f"Error getting duplicate stats: {e}")
+            conn.close()
+            return {'duplicate_emails': [], 'total_duplicates': 0}
+
     def clear_candidates(self):
         conn = self._get_connection()
         cursor = conn.cursor()

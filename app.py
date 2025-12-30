@@ -817,14 +817,35 @@ def webhook_application():
             else:
                 print("❌ CRITICAL: No active jobs available! Application will be orphaned.")
         
-        # Check for duplicates (debounce) - now includes job_id
+        # Check for duplicates - comprehensive check by email AND phone
         email = data.get('email')
+        phone = data.get('phone')
+        
+        # First: Quick debounce check (same email in last 2 minutes)
         if email:
-            # Check if we processed this email FOR THIS JOB in the last 2 minutes
-            existing = storage_service.get_recent_candidate_by_email(email, job_id=job_id, minutes=2)
-            if existing:
-                print(f"⚠️ DUPLICATE DETECTED: Ignoring webhook for {email} on job {job_id} (processed recently)")
-                return jsonify({"status": "success", "message": "Duplicate application ignored."}), 200
+            recent = storage_service.get_recent_candidate_by_email(email, job_id=job_id, minutes=2)
+            if recent:
+                print(f"⚠️ DUPLICATE (DEBOUNCE): Ignoring webhook for {email} on job {job_id} (processed in last 2 min)")
+                return jsonify({
+                    "status": "duplicate",
+                    "message": "Duplicate application ignored (recently submitted).",
+                    "existing_id": recent.get('id')
+                }), 200
+        
+        # Second: Full duplicate check (same email OR phone ever applied to this job)
+        existing_application = storage_service.check_duplicate_application(
+            email=email, 
+            phone=phone, 
+            job_id=job_id
+        )
+        if existing_application:
+            print(f"⚠️ DUPLICATE (EXISTING): {email or phone} already applied to job {job_id}")
+            return jsonify({
+                "status": "duplicate",
+                "message": "You have already applied for this position.",
+                "existing_id": existing_application.get('id'),
+                "applied_at": existing_application.get('timestamp')
+            }), 200
 
         # 1. Save Pending Application IMMEDIATELY (Critical for Vercel)
         candidate_id = save_pending_application(data)
@@ -1443,6 +1464,45 @@ def bulk_delete():
         'success': True,
         'deleted': deleted
     })
+
+
+# ============================================================
+# DUPLICATE DETECTION API
+# ============================================================
+@app.route('/api/duplicates', methods=['GET'])
+def get_duplicates():
+    """Get duplicate application statistics"""
+    job_id = request.args.get('job_id')
+    stats = storage_service.get_duplicate_stats(job_id)
+    return jsonify(stats)
+
+
+@app.route('/api/duplicates/check', methods=['POST'])
+def check_duplicate():
+    """Check if an application would be a duplicate before submitting"""
+    data = request.json
+    email = data.get('email')
+    phone = data.get('phone')
+    job_id = data.get('job_id')
+    
+    if not job_id:
+        return jsonify({'error': 'job_id is required'}), 400
+    
+    existing = storage_service.check_duplicate_application(email, phone, job_id)
+    
+    if existing:
+        return jsonify({
+            'is_duplicate': True,
+            'existing_application': {
+                'id': existing.get('id'),
+                'name': existing.get('name'),
+                'email': existing.get('email'),
+                'applied_at': existing.get('timestamp'),
+                'score': existing.get('score', 0)
+            }
+        })
+    
+    return jsonify({'is_duplicate': False})
 
 
 # ============================================================
