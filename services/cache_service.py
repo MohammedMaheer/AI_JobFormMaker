@@ -73,8 +73,14 @@ class CacheService:
         try:
             if self.redis:
                 value = self.redis.get(key)
-                if value:
-                    return json.loads(value) if isinstance(value, str) else value
+                if value is not None:
+                    # Upstash returns the value directly, try to parse as JSON
+                    if isinstance(value, str):
+                        try:
+                            return json.loads(value)
+                        except json.JSONDecodeError:
+                            return value  # Return as-is if not valid JSON
+                    return value
             else:
                 # Memory cache with TTL check
                 if key in self.memory_cache:
