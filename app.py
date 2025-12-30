@@ -15,6 +15,7 @@ from services.resume_parser import ResumeParser
 from services.candidate_scorer import CandidateScorer
 from services.storage_service import StorageService
 from services.email_service import EmailService
+from services.cache_service import CacheService
 
 load_dotenv()
 
@@ -23,6 +24,7 @@ resume_parser = ResumeParser()
 candidate_scorer = CandidateScorer()
 storage_service = StorageService()
 email_service = EmailService()
+cache_service = CacheService()
 
 app = Flask(__name__, static_folder='static', template_folder='templates')
 CORS(app)
@@ -58,6 +60,8 @@ def health_check():
         'status': 'healthy',
         'environment': 'vercel' if is_vercel else 'local',
         'database': 'postgresql' if is_postgres else 'sqlite',
+        'cache': 'redis' if cache_service.is_redis else 'memory',
+        'email_queue': email_service.get_queue_status(),
         'timestamp': datetime.now().isoformat()
     })
 
@@ -115,19 +119,42 @@ def uploaded_file(filename):
 
 @app.route('/api/jobs', methods=['GET'])
 def get_jobs():
+    """Get all jobs - with caching"""
+    # Try cache first
+    cached = cache_service.get_jobs()
+    if cached is not None:
+        return jsonify({'jobs': cached, '_cached': True})
+    
+    # Fetch from database and cache
     jobs = storage_service.get_all_jobs()
+    cache_service.set_jobs(jobs)
     return jsonify({'jobs': jobs})
 
 @app.route('/api/jobs/<job_id>', methods=['GET'])
 def get_job(job_id):
+    """Get single job - with caching"""
+    # Try cache first
+    cached = cache_service.get_job(job_id)
+    if cached is not None:
+        return jsonify({'job': cached, '_cached': True})
+    
     job = storage_service.get_job(job_id)
     if not job:
         return jsonify({'error': 'Job not found'}), 404
+    
+    cache_service.set_job(job_id, job)
     return jsonify({'job': job})
 
 @app.route('/api/jobs/<job_id>/candidates', methods=['GET'])
 def get_job_candidates(job_id):
+    """Get job candidates - with caching"""
+    # Try cache first
+    cached = cache_service.get_candidates(job_id)
+    if cached is not None:
+        return jsonify({'candidates': cached, '_cached': True})
+    
     candidates = storage_service.get_all_candidates(job_id=job_id)
+    cache_service.set_candidates(job_id, candidates)
     return jsonify({'candidates': candidates})
 
 @app.route('/api/jobs/<job_id>/close', methods=['POST'])
@@ -160,6 +187,9 @@ def close_job(job_id):
         # 3. Update local status
         success = storage_service.update_job_status(job_id, 'closed')
         if success:
+            # Invalidate cache
+            cache_service.invalidate_jobs()
+            cache_service.delete(f'job:{job_id}')
             print(f"Successfully closed job: {job_id}")
             return jsonify({'success': True})
         else:
@@ -194,6 +224,8 @@ def delete_job(job_id):
 
         success = storage_service.delete_job(job_id)
         if success:
+            # Invalidate cache
+            cache_service.invalidate_jobs()
             return jsonify({'success': True})
         else:
             return jsonify({'success': False, 'error': 'Failed to delete job'}), 500
@@ -676,6 +708,9 @@ def score_candidate():
         # Save to storage
         storage_service.save_candidate(score_result)
         
+        # Invalidate candidates cache for this job
+        cache_service.invalidate_candidates(score_result.get('job_id'))
+        
         return jsonify({
             'success': True,
             'score': score_result
@@ -865,6 +900,10 @@ def save_pending_application(data):
         }
         
         storage_service.save_candidate(candidate_data)
+        
+        # Invalidate candidates cache for this job
+        cache_service.invalidate_candidates(job_id)
+        
         print(f"Saved pending application: {candidate_data['id']}")
         return candidate_data['id']
     except Exception as e:
@@ -1115,6 +1154,10 @@ def process_application_background(data, candidate_id=None, base_url=None, skip_
             score_result['status'] = 'processed'
                 
             storage_service.save_candidate(score_result)
+            
+            # Invalidate candidates cache for this job
+            cache_service.invalidate_candidates(score_result.get('job_id'))
+            
             print("Candidate saved successfully with status: processed")
             
             # 5. Send Emails (only if not skipped)
@@ -1303,8 +1346,14 @@ def process_candidate_manual(candidate_id):
 # ============================================================
 @app.route('/api/analytics', methods=['GET'])
 def get_analytics():
-    """Get analytics data for dashboard"""
+    """Get analytics data for dashboard - with caching"""
+    # Try cache first
+    cached = cache_service.get_analytics()
+    if cached is not None:
+        return jsonify({**cached, '_cached': True})
+    
     analytics = storage_service.get_analytics()
+    cache_service.set_analytics(analytics)
     return jsonify(analytics)
 
 
@@ -1386,6 +1435,9 @@ def bulk_delete():
     for cid in candidate_ids:
         if storage_service.delete_candidate(cid):
             deleted += 1
+    
+    # Invalidate all candidate caches (we don't know which job they belonged to)
+    cache_service.invalidate_candidates()
     
     return jsonify({
         'success': True,

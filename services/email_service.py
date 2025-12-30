@@ -3,8 +3,17 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.utils import formataddr
 import os
+import threading
+from queue import Queue
+from datetime import datetime
+
 
 class EmailService:
+    """
+    Email service with background sending support.
+    Emails are queued and sent in a background thread to avoid blocking the main request.
+    """
+    
     def __init__(self):
         self.smtp_server = os.getenv('SMTP_SERVER', 'smtp.gmail.com')
         self.smtp_port = int(os.getenv('SMTP_PORT', 587))
@@ -13,8 +22,53 @@ class EmailService:
         self.sender_name = os.getenv('SENDER_NAME', 'Recruitment Team')
         self.admin_email = os.getenv('ADMIN_EMAIL')
         self.enabled = bool(self.sender_email and self.sender_password)
-
-    def send_email(self, to_email, subject, body, is_html=False):
+        
+        # Background email queue
+        self.email_queue = Queue()
+        self.worker_thread = None
+        self.is_running = False
+        
+        # Email stats
+        self.stats = {
+            'queued': 0,
+            'sent': 0,
+            'failed': 0,
+            'last_error': None
+        }
+    
+    def _start_worker(self):
+        """Start background worker thread if not running"""
+        if self.worker_thread is None or not self.worker_thread.is_alive():
+            self.is_running = True
+            self.worker_thread = threading.Thread(target=self._process_queue, daemon=True)
+            self.worker_thread.start()
+            print("📧 Email worker thread started")
+    
+    def _process_queue(self):
+        """Process emails from queue in background"""
+        while self.is_running:
+            try:
+                # Wait for email with timeout to allow graceful shutdown
+                email_task = self.email_queue.get(timeout=5)
+                if email_task is None:  # Shutdown signal
+                    break
+                
+                to_email, subject, body, is_html = email_task
+                success = self._send_email_sync(to_email, subject, body, is_html)
+                
+                if success:
+                    self.stats['sent'] += 1
+                else:
+                    self.stats['failed'] += 1
+                    
+                self.email_queue.task_done()
+            except Exception as e:
+                # Queue.get timeout - just continue
+                if 'Empty' not in str(type(e)):
+                    print(f"Email worker error: {e}")
+    
+    def _send_email_sync(self, to_email, subject, body, is_html=False):
+        """Synchronously send an email (used by background worker)"""
         if not self.enabled:
             print("Email service disabled (credentials not set).")
             return False
@@ -33,11 +87,61 @@ class EmailService:
             text = msg.as_string()
             server.sendmail(self.sender_email, to_email, text)
             server.quit()
-            print(f"Email sent to {to_email}")
+            print(f"✅ Email sent to {to_email}")
             return True
         except Exception as e:
-            print(f"Failed to send email: {e}")
+            print(f"❌ Failed to send email to {to_email}: {e}")
+            self.stats['last_error'] = str(e)
             return False
+    
+    def send_email(self, to_email, subject, body, is_html=False, background=True):
+        """
+        Send an email - queued for background sending by default.
+        
+        Args:
+            to_email: Recipient email address
+            subject: Email subject
+            body: Email body (plain text or HTML)
+            is_html: Whether body is HTML
+            background: If True, queue for async sending. If False, send synchronously.
+        """
+        if not self.enabled:
+            print("Email service disabled (credentials not set).")
+            return False
+        
+        if background:
+            # Queue for background sending
+            self._start_worker()
+            self.email_queue.put((to_email, subject, body, is_html))
+            self.stats['queued'] += 1
+            print(f"📬 Email queued for {to_email} (queue size: {self.email_queue.qsize()})")
+            return True  # Queued successfully
+        else:
+            # Send synchronously (blocking)
+            return self._send_email_sync(to_email, subject, body, is_html)
+    
+    def send_email_async(self, to_email, subject, body, is_html=False):
+        """Explicitly send email in background (alias for send_email with background=True)"""
+        return self.send_email(to_email, subject, body, is_html, background=True)
+    
+    def send_email_sync(self, to_email, subject, body, is_html=False):
+        """Explicitly send email synchronously (blocking)"""
+        return self.send_email(to_email, subject, body, is_html, background=False)
+    
+    def get_queue_status(self):
+        """Get current email queue status"""
+        return {
+            'queue_size': self.email_queue.qsize(),
+            'worker_running': self.worker_thread.is_alive() if self.worker_thread else False,
+            'stats': self.stats
+        }
+    
+    def shutdown(self):
+        """Gracefully shutdown the email worker"""
+        self.is_running = False
+        if self.worker_thread and self.worker_thread.is_alive():
+            self.email_queue.put(None)  # Shutdown signal
+            self.worker_thread.join(timeout=5)
 
     def send_candidate_confirmation(self, candidate_email, candidate_name, job_title=None):
         if not candidate_email:
