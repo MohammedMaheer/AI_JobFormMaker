@@ -697,7 +697,7 @@ function openCandidateModal(candidate) {
                     <strong style="color: var(--success-color); display: flex; align-items: center; gap: 10px; margin-bottom: 15px; font-size: 1.1rem;">
                         <i class="fas fa-check-circle"></i> Strengths
                     </strong>
-                    <ul style="margin: 0 0 0 20px; color: var(--text-secondary); line-height: 1.6;">
+                    <ul style="margin: 0 0 0 20px; color: #d0d0d5; line-height: 1.6;">
                         ${candidate.ai_analysis.pros.map(pro => `<li style="margin-bottom: 8px;">${pro}</li>`).join('')}
                     </ul>
                 </div>`;
@@ -709,7 +709,7 @@ function openCandidateModal(candidate) {
                     <strong style="color: var(--danger-color); display: flex; align-items: center; gap: 10px; margin-bottom: 15px; font-size: 1.1rem;">
                         <i class="fas fa-exclamation-circle"></i> Areas for Improvement
                     </strong>
-                    <ul style="margin: 0 0 0 20px; color: var(--text-secondary); line-height: 1.6;">
+                    <ul style="margin: 0 0 0 20px; color: #d0d0d5; line-height: 1.6;">
                         ${candidate.ai_analysis.cons.map(con => `<li style="margin-bottom: 8px;">${con}</li>`).join('')}
                     </ul>
                 </div>`;
@@ -755,15 +755,15 @@ function openCandidateModal(candidate) {
 
         <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 30px;">
             <div style="background: rgba(255, 255, 255, 0.03); padding: 20px; border-radius: 16px; text-align: center; border: 1px solid var(--border-color);">
-                <div style="font-size: 1rem; color: var(--text-secondary); margin-bottom: 8px;">Skills Match</div>
+                <div style="font-size: 1rem; color: #c0c0c5; margin-bottom: 8px;">Skills Match</div>
                 <div style="font-size: 2rem; font-weight: 700; color: var(--primary-color);">${candidate.breakdown?.skills_match || 0}%</div>
             </div>
             <div style="background: rgba(255, 255, 255, 0.03); padding: 20px; border-radius: 16px; text-align: center; border: 1px solid var(--border-color);">
-                <div style="font-size: 1rem; color: var(--text-secondary); margin-bottom: 8px;">Experience</div>
+                <div style="font-size: 1rem; color: #c0c0c5; margin-bottom: 8px;">Experience</div>
                 <div style="font-size: 2rem; font-weight: 700; color: var(--primary-color);">${candidate.breakdown?.experience || 0}%</div>
             </div>
             <div style="background: rgba(255, 255, 255, 0.03); padding: 20px; border-radius: 16px; text-align: center; border: 1px solid var(--border-color);">
-                <div style="font-size: 1rem; color: var(--text-secondary); margin-bottom: 8px;">Education</div>
+                <div style="font-size: 1rem; color: #c0c0c5; margin-bottom: 8px;">Education</div>
                 <div style="font-size: 2rem; font-weight: 700; color: var(--primary-color);">${candidate.breakdown?.education || 0}%</div>
             </div>
         </div>
@@ -772,7 +772,7 @@ function openCandidateModal(candidate) {
             <h4 style="color: var(--text-primary); margin-bottom: 15px; font-size: 1.2rem; border-bottom: 1px solid var(--border-color); padding-bottom: 10px;">
                 <i class="fas fa-robot" style="margin-right: 10px; color: var(--info-color);"></i> AI Executive Summary
             </h4>
-            <p style="line-height: 1.8; color: var(--text-secondary); font-size: 1.05rem;">
+            <p style="line-height: 1.8; color: #d0d0d5; font-size: 1.05rem;">
                 ${candidate.ai_analysis?.summary || candidate.feedback || 'No summary available.'}
             </p>
         </div>
