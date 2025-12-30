@@ -24,8 +24,11 @@ This tool streamlines the recruitment process by leveraging AI to:
 *   **☁️ Dual Deployment**: Run locally (SQLite) or deploy to Vercel (Neon PostgreSQL)
 *   **🤖 Multi-AI Support**: Perplexity (default), OpenAI GPT-4, or Claude 3.5
 *   **📊 Intelligent Scoring**: 9-dimension analysis with red flag detection
-*   **📧 Email Notifications**: Automated confirmation and rejection emails
+*   **📧 Background Emails**: Non-blocking email queue with threading
 *   **🔗 LinkedIn Integration**: Detect LinkedIn profiles and apply scoring penalty if missing
+*   **⚡ Redis Caching**: Upstash Redis for blazing-fast API responses
+*   **📋 Bulk Operations**: Select multiple candidates for bulk reject/delete
+*   **📄 Resume Preview**: View resumes in-app without downloading
 
 ### Scoring System (v2.0)
 *   **Skills Match** (20%): Technical skills alignment
@@ -86,6 +89,7 @@ See **[SETUP_GUIDE.md](SETUP_GUIDE.md)** for complete instructions on:
 | **Backend** | Python 3.11, Flask |
 | **Frontend** | HTML5, CSS3 (Glassmorphism), JavaScript |
 | **Database** | SQLite (local) / PostgreSQL (production) |
+| **Caching** | Upstash Redis (serverless) / In-memory fallback |
 | **AI** | Perplexity AI, OpenAI, Claude |
 | **Hosting** | Vercel (serverless) |
 | **Integration** | Google Apps Script |
@@ -102,9 +106,10 @@ See **[SETUP_GUIDE.md](SETUP_GUIDE.md)** for complete instructions on:
 ├── final_google_script.js  # Google Forms integration
 ├── services/
 │   ├── ai_service.py      # AI analysis
+│   ├── cache_service.py   # Redis/memory caching
 │   ├── candidate_scorer.py # Scoring algorithm
 │   ├── storage_service.py  # Database (SQLite/PostgreSQL)
-│   ├── email_service.py   # Email notifications
+│   ├── email_service.py   # Background email queue
 │   └── file_processor.py  # Resume parsing
 ├── static/
 │   ├── css/               # Stylesheets

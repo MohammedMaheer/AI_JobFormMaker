@@ -8,11 +8,12 @@ This guide covers the end-to-end process of setting up the **AI Recruitment Tool
 1. [Prerequisites](#1-prerequisites)
 2. [Local Development Setup](#2-local-development-setup)
 3. [Database Setup (Neon Postgres)](#3-database-setup-neon-postgres)
-4. [Deployment to Vercel](#4-deployment-to-vercel)
-5. [Google Apps Script Integration](#5-google-apps-script-integration)
-6. [Email Setup (Gmail SMTP)](#6-email-setup-gmail-smtp)
-7. [Testing the Full Flow](#7-testing-the-full-flow)
-8. [Troubleshooting](#8-troubleshooting)
+4. [Redis Caching Setup (Upstash)](#4-redis-caching-setup-upstash)
+5. [Deployment to Vercel](#5-deployment-to-vercel)
+6. [Google Apps Script Integration](#6-google-apps-script-integration)
+7. [Email Setup (Gmail SMTP)](#7-email-setup-gmail-smtp)
+8. [Testing the Full Flow](#8-testing-the-full-flow)
+9. [Troubleshooting](#9-troubleshooting)
 
 ---
 
@@ -27,6 +28,7 @@ Before starting, ensure you have:
 | **GitHub Account** | Host your code | [github.com](https://github.com) |
 | **Vercel Account** | Host the application | [vercel.com](https://vercel.com) |
 | **Neon Account** | PostgreSQL database | [neon.tech](https://neon.tech) |
+| **Upstash Account** | Redis caching (optional) | [upstash.com](https://upstash.com) |
 | **Google Account** | Forms & Sheets | [google.com](https://google.com) |
 | **Perplexity API Key** | AI analysis | [perplexity.ai/settings/api](https://www.perplexity.ai/settings/api) |
 
@@ -133,7 +135,63 @@ Run the app - it will now use your Neon database.
 
 ---
 
-## 4. Deployment to Vercel
+## 4. Redis Caching Setup (Upstash)
+
+Upstash provides **free serverless Redis** that works perfectly with Vercel. This makes your API responses 10-50x faster.
+
+> **Note:** This is optional! The app falls back to in-memory caching if Redis is not configured.
+
+### Step 1: Create Upstash Account
+
+1. Go to [Upstash Console](https://console.upstash.com/)
+2. Sign up (free tier = 10,000 commands/day)
+
+### Step 2: Create a Redis Database
+
+1. Click **"Create Database"**
+2. Name: `recruitment-cache`
+3. Region: Choose closest to your Vercel deployment
+4. Type: **Regional** (free tier)
+
+### Step 3: Get Credentials
+
+1. On the database page, find **"REST API"** section
+2. Copy these values:
+   - `UPSTASH_REDIS_REST_URL`
+   - `UPSTASH_REDIS_REST_TOKEN`
+
+### Step 4: Add to Environment
+
+**For Local Development** (`.env`):
+```ini
+UPSTASH_REDIS_REST_URL=https://xxx.upstash.io
+UPSTASH_REDIS_REST_TOKEN=AXxxxx...
+```
+
+**For Vercel**: Add these in Dashboard → Settings → Environment Variables
+
+### What Gets Cached?
+
+| Data | TTL | Benefit |
+|------|-----|---------|
+| Job listings | 5 min | Fast dashboard loads |
+| Candidate lists | 1 min | Snappy candidate views |
+| Analytics data | 5 min | Instant charts |
+| AI scores | 24 hrs | Never re-calculate |
+
+### Verify Caching
+
+Check `/api/health` endpoint:
+```json
+{
+  "cache": "redis",  // or "memory" if not configured
+  "status": "healthy"
+}
+```
+
+---
+
+## 5. Deployment to Vercel
 
 ### Step 1: Push to GitHub
 
@@ -160,11 +218,13 @@ Add these in Vercel Dashboard → Project → Settings → Environment Variables
 | `AI_PROVIDER` | `perplexity` | or `openai`, `claude` |
 | `PERPLEXITY_API_KEY` | `pplx-xxx...` | Your API key |
 | `DATABASE_URL` | `postgresql://...` | Neon **Pooled** connection string |
-| `GOOGLE_SCRIPT_URL` | `https://script.google.com/...` | From Step 5 |
+| `UPSTASH_REDIS_REST_URL` | `https://xxx.upstash.io` | Optional - for caching |
+| `UPSTASH_REDIS_REST_TOKEN` | `AXxxx...` | Optional - for caching |
+| `GOOGLE_SCRIPT_URL` | `https://script.google.com/...` | From Step 6 |
 | `SMTP_SERVER` | `smtp.gmail.com` | Optional - for emails |
 | `SMTP_PORT` | `587` | Optional |
 | `SENDER_EMAIL` | `your@gmail.com` | Optional |
-| `SENDER_PASSWORD` | `app-password` | Optional - See Step 6 |
+| `SENDER_PASSWORD` | `app-password` | Optional - See Step 7 |
 | `SENDER_NAME` | `Recruitment Team` | Optional |
 
 ### Step 4: Deploy
@@ -177,11 +237,11 @@ Add these in Vercel Dashboard → Project → Settings → Environment Variables
 
 Visit these endpoints:
 - `https://your-app.vercel.app/` - Dashboard
-- `https://your-app.vercel.app/api/health` - Should show `"database": "postgresql"`
+- `https://your-app.vercel.app/api/health` - Should show `"database": "postgresql"` and `"cache": "redis"`
 
 ---
 
-## 5. Google Apps Script Integration
+## 6. Google Apps Script Integration
 
 This connects Google Forms to your application for automatic candidate processing.
 
@@ -395,9 +455,10 @@ python app.py --no-ngrok
 ├── final_google_script.js # Google Apps Script code
 ├── services/
 │   ├── ai_service.py     # AI analysis (Perplexity/OpenAI/Claude)
+│   ├── cache_service.py  # Redis/memory caching (Upstash)
 │   ├── candidate_scorer.py # Scoring algorithm
 │   ├── storage_service.py  # Database (SQLite/PostgreSQL)
-│   ├── email_service.py   # Email notifications
+│   ├── email_service.py   # Background email queue
 │   └── file_processor.py  # Resume parsing
 ├── static/
 │   ├── css/              # Stylesheets
